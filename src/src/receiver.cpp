@@ -19,7 +19,7 @@ int receive(Logger& logger, uint32_t windowSize, PacketQueue<char*>*& queue, uin
 {
     int sockfd;
     ssize_t wc;
-    struct pl_packet* packet;
+    struct PerfectLinksPacket* packet;
 
     char log_entry[LOG_MSG_SIZE];
 

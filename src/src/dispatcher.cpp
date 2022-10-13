@@ -93,7 +93,7 @@ int dispatch(const Parser::Host host, std::vector<PacketQueue<char*>*>& qs)
         }
 
         memcpy(&buf[MESSAGE_PACKET_SIZE], &src_addr, addrlen);
-        memcpy(&sender, &buf[offsetof(pl_packet, sender)], sizeof(uint64_t));
+        memcpy(&sender, &buf[offsetof(PerfectLinksPacket, sender)], sizeof(uint64_t));
         queues[sender - 1]->push_msg(buf);
     }
 

@@ -3,24 +3,22 @@
 class ReceiverWindow : public SlidingWindow
 {
 public:
-    ReceiverWindow(int socket, uint64_t sourceId, uint32_t windowSize, uint32_t lastPacketSequenceNumber)
-        : SlidingWindow(socket, sourceId, windowSize, lastPacketSequenceNumber)
+    ReceiverWindow(int socket, uint64_t sourceId, uint32_t windowSize,
+        uint32_t messagesPerPacket, uint32_t lastPacketSequenceNumber)
+        : SlidingWindow(socket, sourceId, windowSize, messagesPerPacket,
+            lastPacketSequenceNumber)
     {
         this->sourceId = sourceId;
         this->destinationId = UNIDENTIFIED_HOST;
-    }
-    ~ReceiverWindow()
-    {
-
     }
 
     inline ssize_t sendAcknowledgement(char* message)
     {
         ssize_t wc;
-        struct pl_packet* packet;
-        struct pl_packet acknowledgement;
+        struct PerfectLinksPacket* packet;
+        struct PerfectLinksPacket acknowledgement;
 
-        packet = reinterpret_cast<struct pl_packet*>(malloc(PL_PKT_SIZE));
+        packet = reinterpret_cast<struct PerfectLinksPacket*>(malloc(PL_PKT_SIZE));
         if (!packet)
         {
             perror("malloc");

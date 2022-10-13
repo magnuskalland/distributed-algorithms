@@ -24,13 +24,13 @@ public:
         statistics.timeouts++;
     }
 
-    inline ssize_t receiveAcknowledgement(Timer* timer)
+    ssize_t receiveAcknowledgement(Timer* timer)
     {
         ssize_t rc, wc;
         uint32_t shift;
-        struct pl_packet* packet;
+        struct PerfectLinksPacket* packet;
 
-        packet = reinterpret_cast<struct pl_packet*>(malloc(PL_PKT_SIZE));
+        packet = reinterpret_cast<struct PerfectLinksPacket*>(malloc(PL_PKT_SIZE));
         if (!packet)
         {
             perror("malloc");
@@ -124,12 +124,12 @@ private:
         }
         return 0;
     }
-    inline ssize_t sendPayload(struct pl_packet* packet)
+    inline ssize_t sendPayload(struct PerfectLinksPacket* packet)
     {
         return sendPacket(packet, MESSAGE_PACKET_SIZE);
     }
 
-    inline void setPayload(struct pl_packet* packet, uint32_t sequenceNumber)
+    inline void setPayload(struct PerfectLinksPacket* packet, uint32_t sequenceNumber)
     {
         packet->seqnr = sequenceNumber;
         packet->length = MAX_PAYLOAD_SIZE;

@@ -29,7 +29,7 @@ int send_to_host(Logger& logger, PerformanceConfig& config,
 
     SenderWindow* window;
     Timer* timer;
-    struct pl_packet* packet;
+    struct PerfectLinksPacket* packet;
 
     timer = new Timer(config.windowSize,
         config.timeoutSec, config.timeoutNano);
@@ -44,7 +44,7 @@ int send_to_host(Logger& logger, PerformanceConfig& config,
 
     std::cout << "Setting up destination " << dest.ipReadable() << ":" << dest.portReadable() << "\n";
     window = new SenderWindow(sockfd, src, dest.ip, dest.port,
-        config.windowSize, n_messages);
+        config.windowSize, config.messagesPerPacket, n_messages);
 
 
     /* prepare epoll */

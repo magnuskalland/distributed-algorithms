@@ -65,19 +65,19 @@ public:
         return outOfOrderMessageBuffer->getEnd();
     }
 
-    inline bool duplicate(struct pl_packet* packet)
+    inline bool duplicate(struct PerfectLinksPacket* packet)
     {
         return outOfOrderMessageBuffer->get(packet->seqnr)
             || packetLeftOfWindow(packet);
     }
-    inline struct pl_packet* getMessageToDeliver()
+    inline struct PerfectLinksPacket* getMessageToDeliver()
     {
         return deliverableMessages->pop();
     }
-    CircularBuffer<struct pl_packet*>* deliverableMessages;
+    CircularBuffer<struct PerfectLinksPacket*>* deliverableMessages;
 
 protected:
-    inline ssize_t sendPacket(struct pl_packet* packet, size_t size)
+    inline ssize_t sendPacket(struct PerfectLinksPacket* packet, size_t size)
     {
         ssize_t wc = sendto(socket, reinterpret_cast<char*>(packet),
             size, 0, reinterpret_cast<sockaddr*>(&destinationAddress),
@@ -89,7 +89,7 @@ protected:
         return wc;
     }
 
-    inline ssize_t receivePacket(struct pl_packet* packet)
+    inline ssize_t receivePacket(struct PerfectLinksPacket* packet)
     {
         ssize_t rc = recv(socket, buffer, ACK_PACKET_SIZE, 0);
         if (rc == -1)
@@ -101,7 +101,7 @@ protected:
         return rc;
     }
 
-    inline bool packetLeftOfWindow(struct pl_packet* packet)
+    inline bool packetLeftOfWindow(struct PerfectLinksPacket* packet)
     {
         return packet->seqnr < windowStart();
     }
@@ -112,11 +112,11 @@ protected:
     uint32_t windowSize;
     uint32_t lastPacketSequenceNumber;
 
-    struct pl_packet packetPlaceholder;
+    struct PerfectLinksPacket packetPlaceholder;
     char dataPlaceholder[MAX_PAYLOAD_SIZE] = { 0 };
     char buffer[MESSAGE_PACKET_SIZE] = { 0 };
 
-    CircularBuffer<struct pl_packet*>* outOfOrderMessageBuffer;
+    CircularBuffer<struct PerfectLinksPacket*>* outOfOrderMessageBuffer;
 
 
     struct Statistics
