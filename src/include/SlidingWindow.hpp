@@ -24,8 +24,13 @@ public:
         packetPlaceholder.sender = sourceId;
         packetPlaceholder.payload.data = dataPlaceholder;
 
-        outOfOrderMessageBuffer = new CircularBuffer<struct pl_packet*>(windowSize);
-        deliverableMessages = new CircularBuffer<struct pl_packet*>(windowSize);
+        outOfOrderMessageBuffer = new CircularBuffer<struct PerfectLinksPacket*>(windowSize);
+        deliverableMessages = new CircularBuffer<struct PerfectLinksPacket*>(windowSize);
+    }
+    ~SlidingWindow()
+    {
+        outOfOrderMessageBuffer->~CircularBuffer();
+        deliverableMessages->~CircularBuffer();
     }
 
     uint32_t shiftWindow()
