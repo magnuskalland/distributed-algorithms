@@ -15,12 +15,11 @@ enum type
 class Timer
 {
 public:
-    Timer(uint32_t* windowSize, time_t secs, long nanoSecs)
+    Timer(uint32_t windowSize, time_t secs, long nanoSecs)
     {
         this->windowSize = windowSize;
         this->secs = secs;
         this->nanoSecs = nanoSecs;
-        initialWindowSize = *windowSize;
 
         timerfds = new CircularBuffer<int*>(windowSize);
         timers = new CircularBuffer<struct itimerspec*>(windowSize);
@@ -28,9 +27,9 @@ public:
         struct itimerspec* tmp_itimerspec;
         int* tmp_fd;
 
-        for (uint32_t i = 0; i < *windowSize; i++)
+        for (uint32_t i = 0; i < windowSize; i++)
         {
-            tmp_itimerspec = reinterpret_cast<struct itimerspec*>(malloc(*windowSize * sizeof(struct itimerspec)));
+            tmp_itimerspec = reinterpret_cast<struct itimerspec*>(malloc(windowSize * sizeof(struct itimerspec)));
             if (!tmp_itimerspec)
             {
                 perror("malloc");
@@ -41,7 +40,7 @@ public:
             tmp_itimerspec->it_interval.tv_nsec = 0;
             timers->insert(tmp_itimerspec, i + 1);
 
-            tmp_fd = reinterpret_cast<int*>(malloc(*windowSize * sizeof(int)));
+            tmp_fd = reinterpret_cast<int*>(malloc(windowSize * sizeof(int)));
             *tmp_fd = timerfd_create(CLOCK_REALTIME, 0);
             if (*tmp_fd == -1)
             {
@@ -54,7 +53,7 @@ public:
     ~Timer()
     {
         uint32_t start = getStart();
-        for (uint32_t i = start; i < start + initialWindowSize; i++)
+        for (uint32_t i = start; i < start + windowSize; i++)
         {
             close(*timerfds->get(i));
         }
@@ -132,8 +131,7 @@ private:
         return timerfds->getEnd();
     }
 
-    uint32_t* windowSize;
-    uint32_t initialWindowSize;
+    uint32_t windowSize;
 
     time_t secs;
     long nanoSecs;

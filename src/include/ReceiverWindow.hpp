@@ -3,7 +3,7 @@
 class ReceiverWindow : public SlidingWindow
 {
 public:
-    ReceiverWindow(int socket, uint64_t sourceId, uint32_t* windowSize, uint32_t lastPacketSequenceNumber)
+    ReceiverWindow(int socket, uint64_t sourceId, uint32_t windowSize, uint32_t lastPacketSequenceNumber)
         : SlidingWindow(socket, sourceId, windowSize, lastPacketSequenceNumber)
     {
         this->sourceId = sourceId;

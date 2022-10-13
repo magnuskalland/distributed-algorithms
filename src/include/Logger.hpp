@@ -6,8 +6,6 @@
 #include <fstream>
 #include <iostream>
 
-#define LOG_MSG_SIZE 20
-
 class Logger
 {
 private:
@@ -16,8 +14,8 @@ private:
 public:
     void log(std::string s)
     {
-        std::cout << s; // TODO: remove
         logMutex.lock();
+        std::cout << s;
         buffer << s;
         logMutex.unlock();
     }

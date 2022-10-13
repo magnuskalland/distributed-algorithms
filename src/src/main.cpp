@@ -12,6 +12,7 @@
 #include "sender.hpp"
 #include "dispatcher.hpp"
 #include "receiver.hpp"
+#include "config.hpp"
 
 #include "PacketQueue.hpp"
 #include "Logger.hpp"
@@ -106,7 +107,11 @@ int main(int argc, char** argv)
 	uint32_t i, n_messages, recv_proc;
 	std::tie(n_messages, recv_proc) = parser.getConfig();
 
-	struct Parser::PerformanceConfig performanceConfig = parser.getPerformanceConfig();
+	PerformanceConfig config;
+	config.messagesPerPacket = MESSAGES_PER_PACKET;
+	config.windowSize = WINDOW_SIZE > n_messages ? n_messages : WINDOW_SIZE;
+	config.timeoutSec = TIMEOUT_SEC;
+	config.timeoutNano = TIMEOUT_NANO;
 
 	std::thread* receivers = new std::thread[hosts.size()];
 	std::thread dispatcher, sender;
@@ -117,10 +122,6 @@ int main(int argc, char** argv)
 	}
 
 	std::cout << "Broadcasting and delivering messages...\n\n";
-
-	printf("Window size: %d\n", *performanceConfig.windowSize);
-	printf("Timeout in seconds: %d\n", performanceConfig.timeoutSec);
-	printf("Timeout in nano seconds: %d\n", performanceConfig.timeoutNano);
 
 	/* host is a receiver */
 	if (parser.id() == recv_proc)
@@ -133,15 +134,15 @@ int main(int argc, char** argv)
 				continue;
 			}
 			receivers[i] = std::thread{ receive, std::ref(logger),
-					*performanceConfig.windowSize,
-					std::ref(queues[i]), parser.id(), n_messages };
+					config.windowSize, std::ref(queues[i]), parser.id(), n_messages };
 		}
 	}
 
 	/* host is a sender */
 	else
 	{
-		sender = std::thread{ send_to_host, std::ref(logger), std::ref(performanceConfig), parser.id(), hosts[recv_proc - 1], n_messages };
+		sender = std::thread{ send_to_host, std::ref(logger), std::ref(config),
+				parser.id(), hosts[recv_proc - 1], n_messages };
 	}
 
 	// After a process finishes broadcasting,

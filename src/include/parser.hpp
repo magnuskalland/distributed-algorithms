@@ -118,39 +118,6 @@ public:
 		parsed = true;
 	}
 
-	struct PerformanceConfig
-	{
-		uint32_t* windowSize;
-		uint32_t timeoutSec = 0;
-		uint32_t timeoutNano = 100000000;
-	};
-
-	struct PerformanceConfig getPerformanceConfig()
-	{
-		struct PerformanceConfig config;
-		// std::string name;
-		// std::ifstream configFile("performance.config");
-		// std::string line;
-
-		// config.windowSize = static_cast<uint32_t*>(malloc(sizeof(uint32_t)));
-		// std::getline(configFile, line);
-		// std::istringstream line1(line);
-		// line1 >> name >> *config.windowSize;
-
-		// std::getline(configFile, line);
-		// std::istringstream line2(line);
-		// line2 >> name >> config.timeoutSec;
-
-		// std::getline(configFile, line);
-		// std::istringstream line3(line);
-		// line3 >> name >> config.timeoutNano;
-
-		config.windowSize = static_cast<uint32_t*>(malloc(sizeof(uint32_t)));
-		*config.windowSize = 37;
-
-		return config;
-	}
-
 	std::tuple<uint32_t, uint32_t> getConfig()
 	{
 		uint32_t n_messages, recv_proc;

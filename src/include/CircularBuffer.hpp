@@ -11,12 +11,11 @@ template<typename T>
 class CircularBuffer
 {
 public:
-    CircularBuffer(uint32_t* bufferSize)
+    CircularBuffer(uint32_t bufferSize)
     {
         this->bufferSize = bufferSize;
-        initialBufferSize = *bufferSize;
         start = 0;
-        buffer = static_cast<T*>(malloc(sizeof(T) * (*bufferSize)));
+        buffer = static_cast<T*>(malloc(sizeof(T) * (bufferSize)));
         if (!buffer)
         {
             perror("malloc");
@@ -44,7 +43,7 @@ public:
     /* used for traversal. Using the last sequence number of window */
     inline uint32_t getEnd()
     {
-        return getStart() + *bufferSize;
+        return getStart() + bufferSize;
     }
 
     inline void insert(T ptr, uint32_t i)
@@ -95,10 +94,9 @@ public:
 private:
     inline uint32_t getIndex(uint32_t i)
     {
-        return i % *bufferSize;
+        return i % bufferSize;
     }
-    uint32_t initialBufferSize;
-    uint32_t* bufferSize;
+    uint32_t bufferSize;
     uint32_t start;
     T* buffer;
 };

@@ -11,13 +11,10 @@
 #include "Timer.hpp"
 #include "packets.hpp"
 
-#define MAX_HOSTS 128
-#define UNIDENTIFIED_HOST MAX_HOSTS + 1
-
 class SlidingWindow
 {
 public:
-    SlidingWindow(int socket, uint64_t sourceId, uint32_t* windowSize,
+    SlidingWindow(int socket, uint64_t sourceId, uint32_t windowSize,
         uint32_t lastPacketSequenceNumber)
     {
         this->socket = socket;
@@ -55,7 +52,7 @@ public:
 
     inline uint32_t getWindowSize()
     {
-        return *windowSize;
+        return windowSize;
     }
 
     inline uint32_t windowStart()
@@ -112,7 +109,7 @@ protected:
     int socket;
     sockaddr_in destinationAddress;
 
-    uint32_t* windowSize;
+    uint32_t windowSize;
     uint32_t lastPacketSequenceNumber;
 
     struct pl_packet packetPlaceholder;

@@ -15,7 +15,6 @@
 #include "PacketQueue.hpp"
 #include "ReceiverWindow.hpp"
 
-#define SENDER_UNDEFINED 129
 int receive(Logger& logger, uint32_t windowSize, PacketQueue<char*>*& queue, uint64_t id, uint32_t n_messages)
 {
     int sockfd;
@@ -36,7 +35,7 @@ int receive(Logger& logger, uint32_t windowSize, PacketQueue<char*>*& queue, uin
         return EXIT_FAILURE;
     }
 
-    window = new ReceiverWindow(sockfd, id, &windowSize, n_messages);
+    window = new ReceiverWindow(sockfd, id, windowSize, n_messages);
 
     /* loop forever because the last ack may get lost */
     while (true)

@@ -12,13 +12,13 @@
 #include "packets.hpp"
 #include "macros.hpp"
 #include "poll.hpp"
-#include "parser.hpp"
+#include "config.hpp"
 
 #include "Logger.hpp"
 #include "Timer.hpp"
 #include "SenderWindow.hpp"
 
-int send_to_host(Logger& logger, Parser::PerformanceConfig& config,
+int send_to_host(Logger& logger, PerformanceConfig& config,
     uint64_t src, Parser::Host dest, uint32_t n_messages)
 {
     uint32_t timed_out_seq_nr;
@@ -37,6 +37,7 @@ int send_to_host(Logger& logger, Parser::PerformanceConfig& config,
     sockfd = SOCKET();
     if (sockfd == -1)
     {
+        perror("socket");
         traceerror();
         return EXIT_FAILURE;
     }
@@ -56,7 +57,7 @@ int send_to_host(Logger& logger, Parser::PerformanceConfig& config,
 
     /* add fds to epoll */
     epoll_add_fd(epollfd, sockfd, &setup);
-    for (uint32_t i = 0; i < *config.windowSize; i++)
+    for (uint32_t i = 0; i < config.windowSize; i++)
     {
         epoll_add_fd(epollfd, timer->getTimerFd(i + 1), &setup);
     }

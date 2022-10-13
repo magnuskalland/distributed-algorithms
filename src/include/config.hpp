@@ -1,9 +1,11 @@
+#pragma once
+
 #include <stdint.h>
 
-#define MESSAGES_PER_PACKET 8
-#define WINDOW_SIZE 16000
-#define TIMEOUT_SEC 0
-#define TIMEOUT_NANO 100000000
+#define MESSAGES_PER_PACKET     8
+#define WINDOW_SIZE             200
+#define TIMEOUT_SEC             0
+#define TIMEOUT_NANO            100000000
 
 struct PerformanceConfig
 {

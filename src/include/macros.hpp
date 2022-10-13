@@ -2,6 +2,10 @@
 
 #include <stdio.h>
 
+#define MAX_HOSTS           128
+#define UNIDENTIFIED_HOST   MAX_HOSTS + 1
+#define LOG_MSG_SIZE 20
+
 #define traceerror()                           \
     (fprintf(stderr, "%s:%s() at line %d\n",    \
              __FILE__, __FUNCTION__, __LINE__))
