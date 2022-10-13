@@ -3,14 +3,10 @@
 class SenderWindow : public SlidingWindow
 {
 public:
-    SenderWindow(int socket, uint64_t sourceId, in_addr_t destinationIp, uint16_t destinationPort, uint32_t windowSize, uint32_t lastPacketSequenceNumber)
-        : SlidingWindow(socket, sourceId, windowSize, lastPacketSequenceNumber)
+    SenderWindow(int socket, uint64_t sourceId, in_addr_t destinationIp, uint16_t destinationPort, uint32_t windowSize, uint32_t messagesPerPacket, uint32_t lastPacketSequenceNumber)
+        : SlidingWindow(socket, sourceId, windowSize, messagesPerPacket, lastPacketSequenceNumber)
     {
         setuphost(destinationAddress, destinationIp, destinationPort);
-    }
-    ~SenderWindow()
-    {
-
     }
     inline ssize_t initiateTransmission(Timer* timer)
     {

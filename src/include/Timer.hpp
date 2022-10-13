@@ -41,10 +41,17 @@ public:
             timers->insert(tmp_itimerspec, i + 1);
 
             tmp_fd = reinterpret_cast<int*>(malloc(windowSize * sizeof(int)));
+            if (!tmp_fd)
+            {
+                perror("malloc");
+                destroy();
+                return;
+            }
             *tmp_fd = timerfd_create(CLOCK_REALTIME, 0);
             if (*tmp_fd == -1)
             {
                 perror("timerfd_create");
+                destroy();
                 return;
             }
             timerfds->insert(tmp_fd, i + 1);
@@ -52,13 +59,7 @@ public:
     }
     ~Timer()
     {
-        uint32_t start = getStart();
-        for (uint32_t i = start; i < start + windowSize; i++)
-        {
-            close(*timerfds->get(i));
-        }
-        free(timers);
-        free(timerfds);
+        destroy();
     }
 
     inline void shift(uint32_t shift)
@@ -129,6 +130,22 @@ private:
     inline uint32_t getEnd()
     {
         return timerfds->getEnd();
+    }
+    inline void destroy()
+    {
+        for (uint32_t i = getStart(); i < getEnd(); i++)
+        {
+            if (timerfds->get(i))
+            {
+                close(*timerfds->get(i));
+            }
+            if (timers->get(i))
+            {
+                free(timers->get(i));
+            }
+        }
+        free(timers);
+        free(timerfds);
     }
 
     uint32_t windowSize;
