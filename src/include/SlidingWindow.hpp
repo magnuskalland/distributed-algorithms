@@ -14,8 +14,8 @@
 class SlidingWindow
 {
 public:
-    SlidingWindow(int socket, uint64_t sourceId, uint32_t windowSize,
-        uint32_t lastPacketSequenceNumber)
+    SlidingWindow(int socket, uint64_t sourceId, uint32_t windowSize, 
+            uint32_t messagesPerPacket, uint32_t lastPacketSequenceNumber)
     {
         this->socket = socket;
         this->windowSize = windowSize;

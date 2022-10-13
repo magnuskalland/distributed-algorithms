@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
+#include <config.hpp>
 
 /* message types */
 #define PAYLOAD 0x00

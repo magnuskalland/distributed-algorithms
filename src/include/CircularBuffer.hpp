@@ -73,7 +73,7 @@ public:
         uint32_t counter = 0;
         for (uint32_t i = getStart(); i < getEnd(); i++)
         {
-            if (get(i) == NULL)
+            if (!get(i))
             {
                 return counter;
             }

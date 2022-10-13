@@ -104,7 +104,7 @@ public:
     }
 
 private:
-    ssize_t sendWindow(Timer* timer)
+    inline ssize_t sendWindow(Timer* timer)
     {
         ssize_t wc;
         packetPlaceholder.type = PAYLOAD;
