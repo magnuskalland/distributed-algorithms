@@ -10,9 +10,14 @@ class PacketQueue
 {
 private:
     std::deque<T> dq;
-    std::mutex mutex;
-    std::condition_variable cond;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
 public:
+    PacketQueue()
+    {
+        pthread_cond_init(&cond, NULL);
+        pthread_mutex_init(&mutex, NULL);
+    }
     ~PacketQueue()
     {
         /* TOOD: must be specific for type T    */
@@ -23,13 +28,14 @@ public:
     void push_msg(T t)
     {
         dq.push_front(t);
-        cond.notify_all();
+        pthread_cond_broadcast(&cond);
     }
     T get_msg()
     {
-        std::unique_lock<std::mutex> lock(mutex);
-        if (dq.size() == 0)
-            cond.wait(lock);
+        pthread_mutex_lock(&mutex);
+        if (dq.size() == 0) /* only one consumer, should't need a while loop */
+            pthread_cond_wait(&cond, &mutex);
+        pthread_mutex_unlock(&mutex);
         T back = dq.back();
         dq.pop_back();
         return back;

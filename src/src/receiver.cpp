@@ -5,17 +5,25 @@
 #include <stddef.h>
 #include <signal.h>
 
-#include <string>
-
-#include "receiver.hpp"
+#include "threads.hpp"
 #include "macros.hpp"
 
 #include "Logger.hpp"
 #include "PacketQueue.hpp"
 #include "ReceiverWindow.hpp"
 
-int receive(Logger& logger, struct PerformanceConfig& config,
-    PacketQueue<char*>*& queue, uint64_t id, uint32_t numberOfMessagesToBeSent)
+static void clean(int)
+{
+
+    // free(buf);
+    // close(sockfd);
+    // close(epollfd);
+
+    printf("Receiver exiting\n");
+    pthread_exit(0);
+}
+
+void* receive(void* ptr)
 {
     int sockfd;
     ssize_t wc;
@@ -32,16 +40,19 @@ int receive(Logger& logger, struct PerformanceConfig& config,
     if (sockfd == -1)
     {
         traceerror();
-        return EXIT_FAILURE;
+        pthread_exit(0);
     }
 
-    window = new ReceiverWindow(sockfd, id, config.windowSize,
-        config.messagesPerPacket, numberOfMessagesToBeSent);
+    assign_handler(clean);
+    struct ReceiverArgs* args = reinterpret_cast<struct ReceiverArgs*>(ptr);
+
+    window = new ReceiverWindow(sockfd, args->id, args->config.windowSize,
+        args->config.messagesPerPacket, args->numberOfMessagesToBeSent);
 
     /* loop forever because the last ack may get lost */
     while (true)
     {
-        message = queue->get_msg(); // blocking call, returns a heap allocated memory area
+        message = args->queue->get_msg(); // blocking call, returns a heap allocated memory area
 
         /* send ack */
         wc = window->sendAcknowledgement(message);
@@ -49,7 +60,7 @@ int receive(Logger& logger, struct PerformanceConfig& config,
         {
             free(message);
             traceerror();
-            return EXIT_FAILURE;
+            pthread_exit(0);
         }
 
         /* deliver messages */
@@ -59,12 +70,12 @@ int receive(Logger& logger, struct PerformanceConfig& config,
             {
                 sprintf(log_entry, RECEIVER_FORMAT,
                     sequence->sender, sequence->payload[i].sequenceNumber);
-                logger.log(log_entry);
+                args->logger.log(log_entry);
             }
             free_sequence(sequence);
         }
         free(message);
     }
-    close(sockfd);
-    return 0;
+    clean(0);
+    pthread_exit(0);
 }

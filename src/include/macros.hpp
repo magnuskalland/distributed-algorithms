@@ -7,6 +7,10 @@
 #define UNIDENTIFIED_HOST   MAX_HOSTS + 1
 #define LOG_MSG_SIZE        20
 
+enum {
+    RECEIVER,
+    SENDER
+};
 
 #define traceerror()                           \
     (fprintf(stderr, "%s:%s() at line %d\n",    \

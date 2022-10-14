@@ -11,50 +11,68 @@
 #include "PacketQueue.hpp"
 #include "Logger.hpp"
 
-#include "dispatcher.hpp"
+#include "threads.hpp"
 #include "packets.hpp"
 #include "macros.hpp"
 #include "parser.hpp"
 #include "poll.hpp"
 
-int dispatch(const Parser::Host host, std::vector<PacketQueue<char*>*>& qs)
+int sockfd, epollfd;
+char* buf;
+int tid;
+
+static void clean(int)
 {
-    int sockfd, epollfd;
+
+    // free(buf);
+    // close(sockfd);
+    // close(epollfd);
+
+    printf("Dispatcher exiting\n");
+    pthread_exit(0);
+}
+
+void* dispatch(void* ptr)
+{
+    assign_handler(clean);
+    struct DispatcherArgs* args = reinterpret_cast<struct DispatcherArgs*>(ptr);
+
     ssize_t rc, wc;
     uint64_t sender;
 
-    std::vector<PacketQueue<char*>*> queues = qs;
-    char* buf;
+    std::vector<PacketQueue<char*>*> queues = args->queues;
 
     socklen_t addrlen = sizeof(sockaddr);
     struct sockaddr_in server;
     struct sockaddr src_addr;
-    struct epoll_event event, setup;
+    struct epoll_event events, setup;
 
-    std::cout << "Receiving on " << host.ipReadable() << ":" << host.portReadable() << "\n";
+    std::cout << "Receiving on " << args->host.ipReadable() << ":" << args->host.portReadable() << "\n";
 
     sockfd = SOCKET();
     if (sockfd == -1)
     {
+        perror("socket");
         traceerror();
-        return EXIT_FAILURE;
+        pthread_exit(0);
     }
 
-    setuphost(server, host.ip, host.port);
+    setuphost(server, args->host.ip, args->host.port);
 
     rc = bind(sockfd, reinterpret_cast<sockaddr*>(&server), sizeof(server));
     if (rc == -1)
     {
+        perror("bind");
         traceerror();
-        return EXIT_FAILURE;
+        pthread_exit(0);
     }
 
-    epollfd = epoll_create1(0);
+    /* prepare epoll */
+    epollfd = epoll_setup(&setup);
     if (epollfd == -1)
     {
         traceerror();
-        close(sockfd);
-        return EXIT_FAILURE;
+        pthread_exit(0);
     }
 
     rc = epoll_add_fd(epollfd, sockfd, &setup);
@@ -62,8 +80,7 @@ int dispatch(const Parser::Host host, std::vector<PacketQueue<char*>*>& qs)
     {
         traceerror();
         close(sockfd);
-        close(epollfd);
-        return EXIT_FAILURE;
+        pthread_exit(0);
     }
 
     while (true)
@@ -74,31 +91,33 @@ int dispatch(const Parser::Host host, std::vector<PacketQueue<char*>*>& qs)
             perror("malloc");
             close(sockfd);
             close(epollfd);
-            return EXIT_FAILURE;
+            pthread_exit(0);
         }
 
-        rc = epoll_wait(epollfd, &event, 1, -1);
+        rc = epoll_wait(epollfd, &events, 1, -1);
         if (rc == -1)
         {
             perror("epoll_wait");
-            traceerror();
+            free(buf);
             close(sockfd);
             close(epollfd);
-            return EXIT_FAILURE;
+            pthread_exit(0);
         }
 
         rc = recvfrom(sockfd, buf, PACKED_MESSAGE_SEQUENCE_SIZE, 0, &src_addr, &addrlen);
         if (rc <= 0)
         {
             perror("recvfrom");
-            traceerror();
-            return EXIT_FAILURE;
+            free(buf);
+            close(sockfd);
+            close(epollfd);
+            pthread_exit(0);
         }
 
         memcpy(&buf[PACKED_MESSAGE_SEQUENCE_SIZE], &src_addr, addrlen);
         memcpy(&sender, &buf[offsetof(struct MessageSequence, sender)], sizeof(uint64_t));
         queues[sender - 1]->push_msg(buf);
     }
-
-    return EXIT_SUCCESS;
+    clean(0);
+    pthread_exit(0);
 }
