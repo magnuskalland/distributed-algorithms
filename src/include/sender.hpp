@@ -2,8 +2,7 @@
 
 #include "parser.hpp"
 #include "Logger.hpp"
-#include "packets.hpp"
 #include "config.hpp"
 
 int send_to_host(Logger& logger, PerformanceConfig& config,
-    uint64_t src, Parser::Host dest, uint32_t n_messages);
+    uint64_t src, Parser::Host dest, uint32_t numberOfMessagesToBeSent);

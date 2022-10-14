@@ -3,9 +3,9 @@
 #include <stdint.h>
 
 #define MESSAGES_PER_PACKET     8
-#define WINDOW_SIZE             200
+#define WINDOW_SIZE             32
 #define TIMEOUT_SEC             0
-#define TIMEOUT_NANO            100000000
+#define TIMEOUT_NANO            50000000
 
 struct PerformanceConfig
 {

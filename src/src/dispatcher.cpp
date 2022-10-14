@@ -24,6 +24,7 @@ int dispatch(const Parser::Host host, std::vector<PacketQueue<char*>*>& qs)
     uint64_t sender;
 
     std::vector<PacketQueue<char*>*> queues = qs;
+    char* buf;
 
     socklen_t addrlen = sizeof(sockaddr);
     struct sockaddr_in server;
@@ -67,10 +68,10 @@ int dispatch(const Parser::Host host, std::vector<PacketQueue<char*>*>& qs)
 
     while (true)
     {
-        char* buf = static_cast<char*>(calloc(1, MESSAGE_PACKET_SIZE + addrlen));
+        buf = static_cast<char*>(malloc(PACKED_MESSAGE_SEQUENCE_SIZE + addrlen));
         if (!buf)
         {
-            traceerror();
+            perror("malloc");
             close(sockfd);
             close(epollfd);
             return EXIT_FAILURE;
@@ -79,23 +80,25 @@ int dispatch(const Parser::Host host, std::vector<PacketQueue<char*>*>& qs)
         rc = epoll_wait(epollfd, &event, 1, -1);
         if (rc == -1)
         {
+            perror("epoll_wait");
             traceerror();
             close(sockfd);
             close(epollfd);
             return EXIT_FAILURE;
         }
 
-        rc = recvfrom(sockfd, buf, MESSAGE_PACKET_SIZE, 0, &src_addr, &addrlen);
+        rc = recvfrom(sockfd, buf, PACKED_MESSAGE_SEQUENCE_SIZE, 0, &src_addr, &addrlen);
         if (rc <= 0)
         {
+            perror("recvfrom");
             traceerror();
             return EXIT_FAILURE;
         }
 
-        memcpy(&buf[MESSAGE_PACKET_SIZE], &src_addr, addrlen);
-        memcpy(&sender, &buf[offsetof(PerfectLinksPacket, sender)], sizeof(uint64_t));
+        memcpy(&buf[PACKED_MESSAGE_SEQUENCE_SIZE], &src_addr, addrlen);
+        memcpy(&sender, &buf[offsetof(struct MessageSequence, sender)], sizeof(uint64_t));
         queues[sender - 1]->push_msg(buf);
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }

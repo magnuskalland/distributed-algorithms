@@ -9,7 +9,6 @@
 
 #include "sender.hpp"
 #include "parser.hpp"
-#include "packets.hpp"
 #include "macros.hpp"
 #include "poll.hpp"
 #include "config.hpp"
@@ -19,7 +18,7 @@
 #include "SenderWindow.hpp"
 
 int send_to_host(Logger& logger, PerformanceConfig& config,
-    uint64_t src, Parser::Host dest, uint32_t n_messages)
+    uint64_t src, Parser::Host dest, uint32_t numberOfMessagesToBeSent)
 {
     uint32_t timed_out_seq_nr;
     ssize_t wc, rc;
@@ -29,7 +28,7 @@ int send_to_host(Logger& logger, PerformanceConfig& config,
 
     SenderWindow* window;
     Timer* timer;
-    struct PerfectLinksPacket* packet;
+    struct MessageSequence* sequence;
 
     timer = new Timer(config.windowSize,
         config.timeoutSec, config.timeoutNano);
@@ -44,8 +43,7 @@ int send_to_host(Logger& logger, PerformanceConfig& config,
 
     std::cout << "Setting up destination " << dest.ipReadable() << ":" << dest.portReadable() << "\n";
     window = new SenderWindow(sockfd, src, dest.ip, dest.port,
-        config.windowSize, config.messagesPerPacket, n_messages);
-
+        config.windowSize, config.messagesPerPacket, numberOfMessagesToBeSent);
 
     /* prepare epoll */
     epollfd = epoll_setup(&setup);
@@ -84,18 +82,22 @@ int send_to_host(Logger& logger, PerformanceConfig& config,
         /* ack received */
         if (events.data.fd == sockfd)
         {
-            rc = window->receiveAcknowledgement(timer);
+            rc = window->receiveAcknowledgementSequence(timer);
             if (rc == -1)
             {
                 traceerror();
                 return EXIT_FAILURE;
             }
 
-            while ((packet = window->getMessageToDeliver()))
+            while ((sequence = window->getMessagesToDeliver()))
             {
-                sprintf(log_entry, "b %d\n", packet->seqnr);
-                logger.log(log_entry);
-                free_packet(packet);
+                for (uint32_t i = 0; i < sequence->numberOfPackets; i++)
+                {
+                    sprintf(log_entry, SENDER_FORMAT,
+                        sequence->payload[i].sequenceNumber);
+                    logger.log(log_entry);
+                }
+                free_sequence(sequence);
             }
 
             continue;
@@ -109,7 +111,7 @@ int send_to_host(Logger& logger, PerformanceConfig& config,
         }
 
         window->incrementTimeouts();
-        wc = window->sendMessage(timed_out_seq_nr);
+        wc = window->sendPayloadSequence(timed_out_seq_nr);
         if (wc == -1)
         {
             traceerror();

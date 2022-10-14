@@ -4,9 +4,9 @@ class ReceiverWindow : public SlidingWindow
 {
 public:
     ReceiverWindow(int socket, uint64_t sourceId, uint32_t windowSize,
-        uint32_t messagesPerPacket, uint32_t lastPacketSequenceNumber)
+        uint32_t messagesPerPacket, uint32_t sequenceNumberOfLastPacket)
         : SlidingWindow(socket, sourceId, windowSize, messagesPerPacket,
-            lastPacketSequenceNumber)
+            sequenceNumberOfLastPacket)
     {
         this->sourceId = sourceId;
         this->destinationId = UNIDENTIFIED_HOST;
@@ -15,41 +15,41 @@ public:
     inline ssize_t sendAcknowledgement(char* message)
     {
         ssize_t wc;
-        struct PerfectLinksPacket* packet;
-        struct PerfectLinksPacket acknowledgement;
+        struct MessageSequence* messageSequence;
 
-        packet = reinterpret_cast<struct PerfectLinksPacket*>(malloc(PL_PKT_SIZE));
-        if (!packet)
+        messageSequence = reinterpret_cast<struct MessageSequence*>(malloc(sizeof(struct MessageSequence)));
+        if (!messageSequence)
         {
             perror("malloc");
             return -1;
         }
 
-        deserialize_packet(packet, message); // heap allocates packet.payload->data
-        acknowledgement = { ACK, sourceId, packet->seqnr, 0, NULL };
+        deserialize_sequence(messageSequence, message, PAYLOAD); // heap allocates packet.payload->data
 
         if (senderUnidentified())
         {
-            destinationId = packet->sender;
+            destinationId = messageSequence->sender;
             setSource(message);
         }
 
-        wc = sendPacket(&acknowledgement, ACK_PACKET_SIZE);
+        memcpy(&messageSequencePlaceholder, messageSequence, offsetof(struct MessageSequence, payload));
+        messageSequencePlaceholder.sender = sourceId;
+        wc = sendAcknowledgementSequence(&messageSequencePlaceholder);
         if (wc == -1)
         {
-            free_packet(packet);
+            free_sequence(messageSequence);
             return -1;
         }
 
         /* packet timed out or acknowledgement got lost */
-        if (duplicate(packet))
+        if (duplicate(messageSequence))
         {
-            free_packet(packet);
+            free_sequence(messageSequence);
             statistics.duplicatePackets++;
             return 0;
         }
 
-        outOfOrderMessageBuffer->insert(packet, packet->seqnr);
+        messageSequencesOutOfOrder->insert(messageSequence, messageSequence->sequenceNumber);
         statistics.correctTransmits += 1;
         shiftWindow();
 
@@ -63,7 +63,7 @@ public:
 
     inline void setSource(char* msg)
     {
-        memcpy(&destinationAddress, &msg[MESSAGE_PACKET_SIZE], sizeof(sockaddr));
+        memcpy(&destinationAddress, &msg[PACKED_MESSAGE_SEQUENCE_SIZE], sizeof(sockaddr));
     }
 
     inline uint64_t getSourceId()
@@ -72,5 +72,17 @@ public:
     }
 
 private:
+    inline ssize_t sendAcknowledgementSequence(struct MessageSequence* sequence)
+    {
+        for (uint32_t i = 0; i < sequence->numberOfPackets; i++)
+        {
+            sequence->payload[i].type = ACK;
+            sequence->payload[i].sequenceNumber = messagesPerPacket * (sequence->sequenceNumber - 1) + i + 1;
+            sequence->payload[i].length = 0;
+
+        }
+        return sendSequence(sequence);
+    }
+
     uint64_t sourceId, destinationId;
 };

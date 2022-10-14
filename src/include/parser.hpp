@@ -120,13 +120,13 @@ public:
 
 	std::tuple<uint32_t, uint32_t> getConfig()
 	{
-		uint32_t n_messages, recv_proc;
+		uint32_t numberOfMessagesToBeSent, receivingProcess;
 		std::ifstream configFile(configPath());
 		std::string line;
 		std::getline(configFile, line);
 		std::istringstream iss(line);
-		iss >> n_messages >> recv_proc;
-		return std::make_tuple(n_messages, recv_proc);
+		iss >> numberOfMessagesToBeSent >> receivingProcess;
+		return std::make_tuple(numberOfMessagesToBeSent, receivingProcess);
 	}
 
 	unsigned long id() const

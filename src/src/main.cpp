@@ -104,14 +104,20 @@ int main(int argc, char** argv)
 
 	outputFile += parser.outputPath();
 	std::vector<PacketQueue<char*>*> queues;
-	uint32_t i, n_messages, recv_proc;
-	std::tie(n_messages, recv_proc) = parser.getConfig();
+	uint32_t i, numberOfMessagesToBeSent, receiverProcess;
+	std::tie(numberOfMessagesToBeSent, receiverProcess) = parser.getConfig();
 
 	PerformanceConfig config;
 	config.messagesPerPacket = MESSAGES_PER_PACKET;
-	config.windowSize = WINDOW_SIZE > n_messages ? n_messages : WINDOW_SIZE;
+	config.windowSize = WINDOW_SIZE * MESSAGES_PER_PACKET > numberOfMessagesToBeSent ?
+		numberOfMessagesToBeSent / MESSAGES_PER_PACKET + 1 : WINDOW_SIZE;
 	config.timeoutSec = TIMEOUT_SEC;
 	config.timeoutNano = TIMEOUT_NANO;
+
+	printf("%-22s: %d\n%-22s: %d\n%-22s: %.2f ms\n\n",
+		"Messages per sequence", config.messagesPerPacket,
+		"Sequences per window", config.windowSize,
+		"Timeout", static_cast<float>(config.timeoutNano) / 1000000);
 
 	std::thread* receivers = new std::thread[hosts.size()];
 	std::thread dispatcher, sender;
@@ -124,17 +130,17 @@ int main(int argc, char** argv)
 	std::cout << "Broadcasting and delivering messages...\n\n";
 
 	/* host is a receiver */
-	if (parser.id() == recv_proc)
+	if (parser.id() == receiverProcess)
 	{
-		dispatcher = std::thread{ dispatch, hosts[recv_proc - 1], std::ref(queues) };
+		dispatcher = std::thread{ dispatch, hosts[receiverProcess - 1], std::ref(queues) };
 		for (i = 0; i < hosts.size(); i++)
 		{
-			if (i == recv_proc - 1)
+			if (i == receiverProcess - 1)
 			{
 				continue;
 			}
-			receivers[i] = std::thread{ receive, std::ref(logger),
-					config.windowSize, std::ref(queues[i]), parser.id(), n_messages };
+			receivers[i] = std::thread{ receive, std::ref(logger), std::ref(config),
+				std::ref(queues[i]), parser.id(), numberOfMessagesToBeSent };
 		}
 	}
 
@@ -142,7 +148,7 @@ int main(int argc, char** argv)
 	else
 	{
 		sender = std::thread{ send_to_host, std::ref(logger), std::ref(config),
-				parser.id(), hosts[recv_proc - 1], n_messages };
+				parser.id(), hosts[receiverProcess - 1], numberOfMessagesToBeSent };
 	}
 
 	// After a process finishes broadcasting,

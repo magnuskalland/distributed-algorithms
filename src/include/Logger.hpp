@@ -6,6 +6,9 @@
 #include <fstream>
 #include <iostream>
 
+#define SENDER_FORMAT       "b %d\n"
+#define RECEIVER_FORMAT     "d %ld %d\n"
+
 class Logger
 {
 private:

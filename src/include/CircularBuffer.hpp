@@ -86,7 +86,7 @@ public:
     {
         for (uint32_t i = getStart(); i < getEnd(); i++)
         {
-            printf("%d ", get(i) ? get(i)->seqnr : 0);
+            printf("%d ", get(i) ? get(i)->sequenceNumber : 0);
         }
         printf("\n");
     }

@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "parser.hpp"
 #include "receiver.hpp"
 #include "macros.hpp"
 
@@ -15,11 +14,12 @@
 #include "PacketQueue.hpp"
 #include "ReceiverWindow.hpp"
 
-int receive(Logger& logger, uint32_t windowSize, PacketQueue<char*>*& queue, uint64_t id, uint32_t n_messages)
+int receive(Logger& logger, struct PerformanceConfig& config,
+    PacketQueue<char*>*& queue, uint64_t id, uint32_t numberOfMessagesToBeSent)
 {
     int sockfd;
     ssize_t wc;
-    struct PerfectLinksPacket* packet;
+    struct MessageSequence* sequence;
 
     char log_entry[LOG_MSG_SIZE];
 
@@ -35,12 +35,14 @@ int receive(Logger& logger, uint32_t windowSize, PacketQueue<char*>*& queue, uin
         return EXIT_FAILURE;
     }
 
-    window = new ReceiverWindow(sockfd, id, windowSize, n_messages);
+    window = new ReceiverWindow(sockfd, id, config.windowSize,
+        config.messagesPerPacket, numberOfMessagesToBeSent);
 
     /* loop forever because the last ack may get lost */
     while (true)
     {
-        message = queue->get_msg(); // blocking call, return a heap allocated memory area
+        message = queue->get_msg(); // blocking call, returns a heap allocated memory area
+
         /* send ack */
         wc = window->sendAcknowledgement(message);
         if (wc == -1)
@@ -51,11 +53,15 @@ int receive(Logger& logger, uint32_t windowSize, PacketQueue<char*>*& queue, uin
         }
 
         /* deliver messages */
-        while ((packet = window->getMessageToDeliver()))
+        while ((sequence = window->getMessagesToDeliver()))
         {
-            sprintf(log_entry, "d %ld %d\n", packet->sender, packet->seqnr);
-            logger.log(log_entry);
-            free_packet(packet);
+            for (uint32_t i = 0; i < sequence->numberOfPackets; i++)
+            {
+                sprintf(log_entry, RECEIVER_FORMAT,
+                    sequence->sender, sequence->payload[i].sequenceNumber);
+                logger.log(log_entry);
+            }
+            free_sequence(sequence);
         }
         free(message);
     }

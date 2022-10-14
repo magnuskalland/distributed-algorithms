@@ -1,39 +1,51 @@
+#include <stdlib.h>
+
 #include "packets.hpp"
 #include "macros.hpp"
 
-#include <stdlib.h>
-
-int deserialize_packet(struct PerfectLinksPacket* dest, char* src)
+ssize_t deserialize_sequence(struct MessageSequence* dest, char* src, int type)
 {
-    memcpy(dest, src, sizeof(struct PerfectLinksPacket));
-    dest->payload.data = static_cast<char*>(calloc(1, dest->length));
-    if (!dest->payload.data)
+    ssize_t err;
+
+    /* copy sequence metadata */
+    memcpy(dest, src, offsetof(struct MessageSequence, payload));
+
+    /* copy into packets */
+    for (uint32_t i = 0; i < dest->numberOfPackets; i++)
     {
-        perror("calloc");
-        return -1;
+        err = deserialize_packet(&dest->payload[i],
+            &src[offsetof(struct MessageSequence, payload)
+            + i * (type == PAYLOAD ? PACKED_MESSAGE_PACKET_SIZE : PACKED_ACK_PACKET_SIZE)]);
+        if (err == -1)
+        {
+            traceerror();
+            return -1;
+        }
     }
-    memcpy(dest->payload.data, &src[offsetof(struct PerfectLinksPacket, payload.data)], dest->length);
     return 0;
 }
 
-int serialize_packet(char** dest, struct PerfectLinksPacket* src)
+ssize_t serialize_sequence(char** dest, struct MessageSequence* src)
 {
-    size_t payload_len = src->length;
-    size_t metadata_len = sizeof(struct PerfectLinksPacket) - sizeof(src->payload.data) + payload_len;
-    *dest = static_cast<char*>(calloc(1, sizeof(struct PerfectLinksPacket) - sizeof(src->payload.data) + src->length));
+    /* allocate size of structs - pointer sizes + room for messages */
+    ssize_t size = sizeof(struct MessageSequence)
+        - sizeof(char*) * src->numberOfPackets
+        + MAX_PAYLOAD_SIZE * src->numberOfPackets;
+    *dest = reinterpret_cast<char*>(malloc(size));
     if (!*dest)
     {
-        perror("calloc");
+        perror("malloc");
         return -1;
     }
 
-    memcpy(*dest, src, metadata_len);
-    memcpy(&((*dest)[offsetof(struct PerfectLinksPacket, payload.data)]), src->payload.data, payload_len);
-    return 0;
-}
+    memcpy(*dest, src, offsetof(struct MessageSequence, payload));
+    for (uint32_t i = 0; i < src->numberOfPackets; i++)
+    {
+        char* packet = &(*dest)[offsetof(struct MessageSequence, payload) + i * (offsetof(struct PerfectLinksPacket, payload) + src->payload[i].length)];
+        serialize_packet(&(*dest)[offsetof(struct MessageSequence, payload)
+            + i * (offsetof(struct PerfectLinksPacket, payload) + src->payload[i].length)],
+            &src->payload[i]);
+    }
 
-void free_packet(struct PerfectLinksPacket* packet)
-{
-    free(packet->payload.data);
-    free(packet);
+    return size;
 }

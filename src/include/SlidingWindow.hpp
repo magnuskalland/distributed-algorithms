@@ -14,29 +14,30 @@
 class SlidingWindow
 {
 public:
-    SlidingWindow(int socket, uint64_t sourceId, uint32_t windowSize, 
-            uint32_t messagesPerPacket, uint32_t lastPacketSequenceNumber)
+    SlidingWindow(int socket, uint64_t sourceId, uint32_t windowSize,
+        uint32_t messagesPerPacket, uint32_t sequenceNumberOfLastPacket)
     {
         this->socket = socket;
         this->windowSize = windowSize;
-        this->lastPacketSequenceNumber = lastPacketSequenceNumber;
+        this->messagesPerPacket = messagesPerPacket;
+        this->sequenceNumberOfLastPacket = sequenceNumberOfLastPacket;
 
-        packetPlaceholder.sender = sourceId;
-        packetPlaceholder.payload.data = dataPlaceholder;
+        messageSequencePlaceholder.sender = sourceId;
+        messageSequencePlaceholder.numberOfPackets = messagesPerPacket;
 
-        outOfOrderMessageBuffer = new CircularBuffer<struct PerfectLinksPacket*>(windowSize);
-        deliverableMessages = new CircularBuffer<struct PerfectLinksPacket*>(windowSize);
+        messageSequencesOutOfOrder = new CircularBuffer<struct MessageSequence*>(windowSize);
+        deliverableMessages = new CircularBuffer<struct MessageSequence*>(windowSize);
     }
     ~SlidingWindow()
     {
-        outOfOrderMessageBuffer->~CircularBuffer();
+        messageSequencesOutOfOrder->~CircularBuffer();
         deliverableMessages->~CircularBuffer();
     }
 
     uint32_t shiftWindow()
     {
         uint32_t shift;
-        shift = outOfOrderMessageBuffer->getShiftCounter();
+        shift = messageSequencesOutOfOrder->getShiftCounter();
         if (shift == 0)
         {
             return 0;
@@ -44,15 +45,15 @@ public:
 
         for (uint32_t i = windowStart(); i < windowStart() + shift; i++)
         {
-            deliverableMessages->insert(outOfOrderMessageBuffer->remove(i), i);
+            deliverableMessages->insert(messageSequencesOutOfOrder->remove(i), i);
         }
-        outOfOrderMessageBuffer->shift(shift);
+        messageSequencesOutOfOrder->shift(shift);
         return shift;
     }
 
     inline bool notFinished()
     {
-        return statistics.correctTransmits < lastPacketSequenceNumber;
+        return statistics.correctTransmits < sequenceNumberOfLastPacket;
     }
 
     inline uint32_t getWindowSize()
@@ -62,67 +63,60 @@ public:
 
     inline uint32_t windowStart()
     {
-        return outOfOrderMessageBuffer->getStart();
+        return messageSequencesOutOfOrder->getStart();
     }
 
     inline uint32_t windowEnd()
     {
-        return outOfOrderMessageBuffer->getEnd();
+        return messageSequencesOutOfOrder->getEnd();
     }
 
-    inline bool duplicate(struct PerfectLinksPacket* packet)
+    inline bool duplicate(struct MessageSequence* sequence)
     {
-        return outOfOrderMessageBuffer->get(packet->seqnr)
-            || packetLeftOfWindow(packet);
+        return messageSequencesOutOfOrder->get(sequence->sequenceNumber)
+            || sequenceLeftOfWindow(sequence);
     }
-    inline struct PerfectLinksPacket* getMessageToDeliver()
+    inline struct MessageSequence* getMessagesToDeliver()
     {
         return deliverableMessages->pop();
     }
-    CircularBuffer<struct PerfectLinksPacket*>* deliverableMessages;
 
 protected:
-    inline ssize_t sendPacket(struct PerfectLinksPacket* packet, size_t size)
+    inline ssize_t sendSequence(struct MessageSequence* sequence)
     {
-        ssize_t wc = sendto(socket, reinterpret_cast<char*>(packet),
-            size, 0, reinterpret_cast<sockaddr*>(&destinationAddress),
-            sizeof(destinationAddress));
+        char* serialiedSequence;
+        ssize_t size;
+
+        size = serialize_sequence(&serialiedSequence, sequence);
+        ssize_t wc = sendto(socket,
+            serialiedSequence, size,
+            0,
+            reinterpret_cast<sockaddr*>(&destinationAddress), sizeof(destinationAddress));
         if (wc == -1)
         {
             perror("sendto");
         }
+        free(serialiedSequence);
         return wc;
     }
 
-    inline ssize_t receivePacket(struct PerfectLinksPacket* packet)
+    inline bool sequenceLeftOfWindow(struct MessageSequence* sequence)
     {
-        ssize_t rc = recv(socket, buffer, ACK_PACKET_SIZE, 0);
-        if (rc == -1)
-        {
-            perror("recv");
-            return -1;
-        }
-        deserialize_packet(packet, buffer); // heap allocates packet->payload.data
-        return rc;
-    }
-
-    inline bool packetLeftOfWindow(struct PerfectLinksPacket* packet)
-    {
-        return packet->seqnr < windowStart();
+        return sequence->sequenceNumber < windowStart();
     }
 
     int socket;
     sockaddr_in destinationAddress;
 
     uint32_t windowSize;
-    uint32_t lastPacketSequenceNumber;
+    uint32_t messagesPerPacket;
+    uint32_t sequenceNumberOfLastPacket;
 
-    struct PerfectLinksPacket packetPlaceholder;
-    char dataPlaceholder[MAX_PAYLOAD_SIZE] = { 0 };
-    char buffer[MESSAGE_PACKET_SIZE] = { 0 };
+    struct MessageSequence messageSequencePlaceholder;
+    char buffer[PACKED_MESSAGE_SEQUENCE_SIZE];
 
-    CircularBuffer<struct PerfectLinksPacket*>* outOfOrderMessageBuffer;
-
+    CircularBuffer<struct MessageSequence*>* messageSequencesOutOfOrder;
+    CircularBuffer<struct MessageSequence*>* deliverableMessages;
 
     struct Statistics
     {
