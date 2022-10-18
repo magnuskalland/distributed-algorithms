@@ -15,28 +15,32 @@
 #include "Timer.hpp"
 #include "SenderWindow.hpp"
 
+static int sockfd, epollfd;
+Timer* timer;
+SenderWindow* window;
+
 static void clean(int)
 {
+    close(sockfd);
+    close(epollfd);
 
-    // free(buf);
-    // close(sockfd);
-    // close(epollfd);
+    delete(timer);
+    delete(window);
 
-    printf("Sender exiting\n");
-    pthread_exit(0);
+    pthread_exit(NULL);
 }
 
 void* send(void* ptr)
 {
     uint32_t timed_out_seq_nr;
     ssize_t wc, rc;
-    int sockfd, epollfd;
     struct epoll_event events, setup;
     char log_entry[LOG_MSG_SIZE];
 
-    SenderWindow* window;
-    Timer* timer;
     struct MessageSequence* sequence;
+
+    bzero(&events, sizeof(struct epoll_event));
+    bzero(&setup, sizeof(struct epoll_event));
 
     assign_handler(clean);
     struct SenderArgs* args = reinterpret_cast<struct SenderArgs*>(ptr);
@@ -49,10 +53,11 @@ void* send(void* ptr)
     {
         perror("socket");
         traceerror();
-        pthread_exit(0);
+        pthread_exit(NULL);
     }
 
     std::cout << "Setting up destination " << args->dest.ipReadable() << ":" << args->dest.portReadable() << "\n";
+
     window = new SenderWindow(sockfd, args->src, args->dest.ip, args->dest.port,
         args->config.windowSize, args->config.messagesPerPacket, args->numberOfMessagesToBeSent);
 
@@ -61,7 +66,7 @@ void* send(void* ptr)
     if (epollfd == -1)
     {
         traceerror();
-        pthread_exit(0);
+        pthread_exit(NULL);
     }
 
     /* add fds to epoll */
@@ -75,18 +80,21 @@ void* send(void* ptr)
     wc = window->initiateTransmission(timer);
     if (wc == -1)
     {
-        pthread_exit(0);
+        pthread_exit(NULL);
     }
 
-    // while (window->notFinished())
     while (true)
     {
         /* blocking */
         rc = epoll_wait(epollfd, &events, 1, -1);
         if (rc == -1)
         {
-            traceerror();
-            pthread_exit(0);
+            if (errno == EINTR)
+            {
+                continue;
+            }
+            perror("epoll_wait");
+            pthread_exit(NULL);
         }
 
         /* ack received */
@@ -96,7 +104,7 @@ void* send(void* ptr)
             if (rc == -1)
             {
                 traceerror();
-                pthread_exit(0);
+                pthread_exit(NULL);
             }
 
             while ((sequence = window->getMessagesToDeliver()))
@@ -107,7 +115,8 @@ void* send(void* ptr)
                         sequence->payload[i].sequenceNumber);
                     args->logger.log(log_entry);
                 }
-                free_sequence(sequence);
+                freesequencedata(sequence);
+                free(sequence);
             }
 
             continue;
@@ -125,15 +134,15 @@ void* send(void* ptr)
         if (wc == -1)
         {
             traceerror();
-            pthread_exit(0);
+            pthread_exit(NULL);
         }
         wc = timer->armTimer(timed_out_seq_nr, ARM);
         if (wc == -1)
         {
             traceerror();
-            pthread_exit(0);
+            pthread_exit(NULL);
         }
     }
-    pthread_exit(0);
+    pthread_exit(NULL);
 }
 

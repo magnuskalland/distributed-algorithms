@@ -6,8 +6,18 @@
 
 #include "parser.hpp"
 #include "config.hpp"
+#include "ReceiverWindow.hpp"
 #include "PacketQueue.hpp"
 #include "Logger.hpp"
+
+inline void assign_handler(void (*handler)(int))
+{
+    struct sigaction sa;
+    bzero(&sa, sizeof(struct sigaction));
+    sa.sa_handler = handler;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGUSR1, &sa, NULL);
+}
 
 struct DispatcherArgs
 {
@@ -22,6 +32,7 @@ struct ReceiverArgs
     PacketQueue<char*>* queue;
     uint64_t id;
     uint32_t numberOfMessagesToBeSent;
+    int* sockfd;
 };
 
 struct SenderArgs
@@ -32,14 +43,6 @@ struct SenderArgs
     Parser::Host dest;
     uint32_t numberOfMessagesToBeSent;
 };
-
-inline void assign_handler(void (*handler)(int))
-{
-    struct sigaction sa;
-    sa.sa_handler = handler;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGUSR1, &sa, NULL);
-}
 
 void* dispatch(void* ptr);
 void* receive(void* ptr);

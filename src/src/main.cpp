@@ -12,6 +12,7 @@
 #include "config.hpp"
 #include "threads.hpp"
 
+#include "ReceiverWindow.hpp"
 #include "PacketQueue.hpp"
 #include "Logger.hpp"
 
@@ -42,6 +43,7 @@ static size_t number_of_receivers;
 static uint32_t i, role, numberOfMessagesToBeSent, receiverProcess;
 
 static pthread_t* receivers;
+static int** receiver_sockets;
 static pthread_t dispatcher, sender;
 static std::vector<struct ReceiverArgs> receiver_args;
 
@@ -55,7 +57,6 @@ static void stop(int)
 
 	// immediately stop network packet processing
 	std::cout << "Immediately stopping network packet processing.\n";
-
 	switch (role)
 	{
 	case RECEIVER:
@@ -70,6 +71,8 @@ static void stop(int)
 		{
 			if (i == receiverProcess - 1) continue;
 			pthread_join(receivers[i], NULL);
+			close(*receiver_sockets[i]);
+			free(receiver_sockets[i]);
 		}
 		break;
 
@@ -81,6 +84,13 @@ static void stop(int)
 	default:
 		fprintf(stderr, "role");
 		break;
+	}
+
+	delete[] receivers;
+	while (queues.size())
+	{
+		delete(queues.back());
+		queues.pop_back();
 	}
 
 	// write/flush output file if necessary
@@ -101,8 +111,8 @@ int main(int argc, char** argv)
 	// Call with `false` if no config file is necessary.
 	bool requireConfig = true;
 
-	Parser parser(argc, argv);
-	parser.parse();
+	Parser* parser = new Parser(argc, argv);
+	parser->parse();
 
 	hello();
 	std::cout << std::endl;
@@ -111,11 +121,11 @@ int main(int argc, char** argv)
 	std::cout << "From a new terminal type `kill -SIGINT " << getpid() << "` or `kill -SIGTERM "
 		<< getpid() << "` to stop processing packets\n\n";
 
-	std::cout << "My ID: " << parser.id() << "\n\n";
+	std::cout << "My ID: " << parser->id() << "\n\n";
 
 	std::cout << "List of resolved hosts is:\n";
 	std::cout << "==========================\n";
-	auto hosts = parser.hosts();
+	auto hosts = parser->hosts();
 	for (auto& host : hosts)
 	{
 		std::cout << host.id << "\n";
@@ -125,21 +135,22 @@ int main(int argc, char** argv)
 		std::cout << "Machine-readbale Port: " << host.port << "\n";
 		std::cout << "\n";
 	}
+
 	std::cout << "\n";
 
 	std::cout << "Path to output:\n";
 	std::cout << "===============\n";
-	std::cout << parser.outputPath() << "\n\n";
+	std::cout << parser->outputPath() << "\n\n";
 
 	std::cout << "Path to config:\n";
 	std::cout << "===============\n";
-	std::cout << parser.configPath() << "\n\n";
+	std::cout << parser->configPath() << "\n\n";
 
 	std::cout << "Doing some initialization...\n\n";
 
-	outputFile += parser.outputPath();
+	outputFile += parser->outputPath();
 
-	std::tie(numberOfMessagesToBeSent, receiverProcess) = parser.getConfig();
+	std::tie(numberOfMessagesToBeSent, receiverProcess) = parser->getConfig();
 
 	config.messagesPerPacket = MESSAGES_PER_PACKET;
 	config.windowSize = WINDOW_SIZE * MESSAGES_PER_PACKET > numberOfMessagesToBeSent ?
@@ -154,23 +165,27 @@ int main(int argc, char** argv)
 
 	number_of_receivers = hosts.size();
 	receivers = new pthread_t[number_of_receivers];
-	role = parser.id() == receiverProcess ? RECEIVER : SENDER;
-
-	for (i = 0; i < number_of_receivers; i++)
-	{
-		queues.push_back(new PacketQueue<char*>());
-		receiver_args.push_back({ std::ref(logger), config, queues[i], parser.id(), numberOfMessagesToBeSent });
-	}
+	receiver_sockets = new int* [number_of_receivers];
+	role = parser->id() == receiverProcess ? RECEIVER : SENDER;
 
 	struct DispatcherArgs dispatcher_args = { hosts[receiverProcess - 1], std::ref(queues) };
-	struct SenderArgs sender_args = { std::ref(logger), config,parser.id(), hosts[receiverProcess - 1], numberOfMessagesToBeSent };
-
-	std::cout << "Broadcasting and delivering messages...\n\n";
+	struct SenderArgs sender_args = { std::ref(logger), config,parser->id(),
+		hosts[receiverProcess - 1], numberOfMessagesToBeSent };
 
 	switch (role)
 	{
 	case RECEIVER:
+
 		/* host is a receiver */
+
+		for (i = 0; i < number_of_receivers; i++)
+		{
+			queues.push_back(new PacketQueue<char*>());
+			receiver_sockets[i] = reinterpret_cast<int*>(malloc(sizeof(int)));
+			receiver_args.push_back({ std::ref(logger), config, queues[i], parser->id(),
+				numberOfMessagesToBeSent, receiver_sockets[i] });
+		}
+
 		pthread_create(&dispatcher, NULL, dispatch, reinterpret_cast<void*>(&dispatcher_args));
 		for (i = 0; i < number_of_receivers; i++)
 		{
@@ -178,7 +193,9 @@ int main(int argc, char** argv)
 			{
 				continue;
 			}
-			pthread_create(&receivers[i], NULL, receive, reinterpret_cast<void*>(&receiver_args[i]));
+
+			pthread_create(&receivers[i], NULL, receive,
+				reinterpret_cast<void*>(&receiver_args[i]));
 		}
 		break;
 	case SENDER:
@@ -189,6 +206,10 @@ int main(int argc, char** argv)
 		fprintf(stderr, "role");
 		break;
 	}
+
+	delete(parser);
+
+	std::cout << "Broadcasting and delivering messages...\n";
 
 	// After a process finishes broadcasting,
 	// it waits forever for the delivery of messages.

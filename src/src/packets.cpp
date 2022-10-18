@@ -25,12 +25,14 @@ ssize_t deserialize_sequence(struct MessageSequence* dest, char* src, int type)
     return 0;
 }
 
-ssize_t serialize_sequence(char** dest, struct MessageSequence* src)
+ssize_t serialize_sequence(char** dest, struct MessageSequence* src, int type)
 {
-    /* allocate size of structs - pointer sizes + room for messages */
-    ssize_t size = sizeof(struct MessageSequence)
-        - sizeof(char*) * src->numberOfPackets
-        + MAX_PAYLOAD_SIZE * src->numberOfPackets;
+    ssize_t size = offsetof(struct MessageSequence, payload)
+        + src->numberOfPackets * offsetof(struct PerfectLinksPacket, payload);
+    ssize_t offset = offsetof(struct MessageSequence, payload);
+    for (uint32_t i = 0; i < src->numberOfPackets; i++)
+        size += src->payload[i].length;
+
     *dest = reinterpret_cast<char*>(malloc(size));
     if (!*dest)
     {
@@ -41,10 +43,8 @@ ssize_t serialize_sequence(char** dest, struct MessageSequence* src)
     memcpy(*dest, src, offsetof(struct MessageSequence, payload));
     for (uint32_t i = 0; i < src->numberOfPackets; i++)
     {
-        char* packet = &(*dest)[offsetof(struct MessageSequence, payload) + i * (offsetof(struct PerfectLinksPacket, payload) + src->payload[i].length)];
-        serialize_packet(&(*dest)[offsetof(struct MessageSequence, payload)
-            + i * (offsetof(struct PerfectLinksPacket, payload) + src->payload[i].length)],
-            &src->payload[i]);
+        serialize_packet(&(*dest)[offset], &src->payload[i]);
+        offset += offsetof(struct MessageSequence, payload) + src->payload[i].length;
     }
 
     return size;

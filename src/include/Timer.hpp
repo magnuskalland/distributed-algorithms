@@ -47,6 +47,7 @@ public:
                 destroy();
                 return;
             }
+
             *tmp_fd = timerfd_create(CLOCK_REALTIME, 0);
             if (*tmp_fd == -1)
             {
@@ -138,14 +139,15 @@ private:
             if (timerfds->get(i))
             {
                 close(*timerfds->get(i));
+                free(timerfds->get(i));
             }
             if (timers->get(i))
             {
                 free(timers->get(i));
             }
         }
-        free(timers);
-        free(timerfds);
+        delete(timerfds);
+        delete(timers);
     }
 
     uint32_t windowSize;

@@ -1,10 +1,15 @@
 #include <sys/epoll.h>
+#include <stdio.h>
 #include "poll.hpp"
 
 int epoll_setup(struct epoll_event* setup)
 {
     int rc, epollfd = epoll_create1(0);
-    if (epollfd == -1) return -1;
+    if (epollfd == -1)
+    {
+        perror("epoll_create");
+        return -1;
+    }
     setup->events = EPOLLIN | EPOLLHUP;
     return epollfd;
 }

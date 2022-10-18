@@ -22,6 +22,9 @@ public:
         this->messagesPerPacket = messagesPerPacket;
         this->sequenceNumberOfLastPacket = sequenceNumberOfLastPacket;
 
+        bzero(&destinationAddress, sizeof(sockaddr_in));
+        bzero(&messageSequencePlaceholder, sizeof(struct MessageSequence));
+
         messageSequencePlaceholder.sender = sourceId;
         messageSequencePlaceholder.numberOfPackets = messagesPerPacket;
 
@@ -30,8 +33,8 @@ public:
     }
     ~SlidingWindow()
     {
-        messageSequencesOutOfOrder->~CircularBuffer();
-        deliverableMessages->~CircularBuffer();
+        delete(messageSequencesOutOfOrder);
+        delete(deliverableMessages);
     }
 
     uint32_t shiftWindow()
@@ -82,12 +85,15 @@ public:
     }
 
 protected:
-    inline ssize_t sendSequence(struct MessageSequence* sequence)
+    inline ssize_t sendSequence(struct MessageSequence* sequence, int type)
     {
         char* serialiedSequence;
         ssize_t size;
-
-        size = serialize_sequence(&serialiedSequence, sequence);
+        size = serialize_sequence(&serialiedSequence, sequence, type);
+        for (uint32_t i = 0; i < sequence->numberOfPackets; i++)
+        {
+            free(sequence->payload[i].payload.data);
+        }
         ssize_t wc = sendto(socket,
             serialiedSequence, size,
             0,
@@ -113,7 +119,7 @@ protected:
     uint32_t sequenceNumberOfLastPacket;
 
     struct MessageSequence messageSequencePlaceholder;
-    char buffer[PACKED_MESSAGE_SEQUENCE_SIZE];
+    char buffer[PACKED_MESSAGE_SEQUENCE_SIZE] = { 0 };
 
     CircularBuffer<struct MessageSequence*>* messageSequencesOutOfOrder;
     CircularBuffer<struct MessageSequence*>* deliverableMessages;

@@ -63,14 +63,18 @@ struct MessageSequence
     printf("\t%-20s: %ld\n\t%-20s: %d\n\t%-20s: %d\n\n", "Sender", s->sender, "Window number", s->sequenceNumber, "Number of packets", s->numberOfPackets);     \
     for (uint32_t _i = 0; _i < s->numberOfPackets; _i++) { PRINT_MSG(reinterpret_cast<char*>(&s->payload[_i])); }
 
-ssize_t serialize_sequence(char** dest, struct MessageSequence* src);
+#define freesequencedata(seq)                           \
+    for (uint32_t i = 0; i < seq->numberOfPackets; i++) \
+        free(seq->payload[i].payload.data)
+
+ssize_t serialize_sequence(char** dest, struct MessageSequence* src, int type);
 ssize_t deserialize_sequence(struct MessageSequence* dest, char* src, int type);
 
 /* Deserializing */
 
 inline ssize_t deserialize_message(struct ApplicationPacket* dest, char* src, uint32_t length)
 {
-    dest->data = reinterpret_cast<char*>(calloc(1, length));
+    dest->data = reinterpret_cast<char*>(malloc(length));
     if (!dest->data)
     {
         perror("malloc");
@@ -116,3 +120,4 @@ inline void free_sequence(struct MessageSequence* sequence)
         free(sequence->payload[i].payload.data);
     }
 }
+

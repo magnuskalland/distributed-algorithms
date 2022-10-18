@@ -1,3 +1,5 @@
+#pragma once
+
 #include "SlidingWindow.hpp"
 
 class ReceiverWindow : public SlidingWindow
@@ -16,7 +18,6 @@ public:
     {
         ssize_t wc;
         struct MessageSequence* messageSequence;
-
         messageSequence = reinterpret_cast<struct MessageSequence*>(malloc(sizeof(struct MessageSequence)));
         if (!messageSequence)
         {
@@ -37,14 +38,16 @@ public:
         wc = sendAcknowledgementSequence(&messageSequencePlaceholder);
         if (wc == -1)
         {
-            free_sequence(messageSequence);
+            freesequencedata(messageSequence);
+            free(messageSequence);
             return -1;
         }
 
         /* packet timed out or acknowledgement got lost */
         if (duplicate(messageSequence))
         {
-            free_sequence(messageSequence);
+            freesequencedata(messageSequence);
+            free(messageSequence);
             statistics.duplicatePackets++;
             return 0;
         }
@@ -81,7 +84,7 @@ private:
             sequence->payload[i].length = 0;
 
         }
-        return sendSequence(sequence);
+        return sendSequence(sequence, ACK);
     }
 
     uint64_t sourceId, destinationId;

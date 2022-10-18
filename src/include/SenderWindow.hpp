@@ -1,3 +1,5 @@
+#pragma once
+
 #include "SlidingWindow.hpp"
 
 class SenderWindow : public SlidingWindow
@@ -24,10 +26,11 @@ public:
             messagesPerPacket * (windowNumber - 1) + i + 1 <= sequenceNumberOfLastPacket;
             i++)
         {
-            setPayload(&messageSequencePlaceholder.payload[i], messagesPerPacket * (windowNumber - 1) + i + 1); // heap allocates .payload[i].data
+            setPayload(&messageSequencePlaceholder.payload[i],
+                messagesPerPacket * (windowNumber - 1) + i + 1); // heap allocates .payload[i].data
         }
         messageSequencePlaceholder.numberOfPackets = i;
-        return sendSequence(&messageSequencePlaceholder);
+        return sendSequence(&messageSequencePlaceholder, PAYLOAD);
     }
 
     inline void incrementTimeouts()
@@ -59,21 +62,24 @@ public:
         if (sequenceLeftOfWindow(sequence))
         {
             statistics.duplicatePackets++;
-            free_sequence(sequence);
+            freesequencedata(sequence);
+            free(sequence);
             return 0;
         }
 
         if (duplicate(sequence))
         {
             statistics.duplicatePackets++;
-            free_sequence(sequence);
+            freesequencedata(sequence);
+            free(sequence);
             return 0;
         }
 
         wc = timer->armTimer(sequence->sequenceNumber, DISARM);
         if (wc == -1)
         {
-            free_sequence(sequence);
+            freesequencedata(sequence);
+            free(sequence);
             return -1;
         }
 
@@ -95,7 +101,7 @@ public:
         for (uint32_t i = windowEnd() - shift; i < windowEnd(); i++)
         {
             /* if we have sent the last packet but still waiting for ACK, don't resend */
-            if (i * messagesPerPacket > sequenceNumberOfLastPacket)
+            if ((i - 1) * messagesPerPacket > sequenceNumberOfLastPacket)
             {
                 return 0;
             }
@@ -121,7 +127,7 @@ private:
         ssize_t wc;
         for (uint32_t i = windowStart(); i < windowEnd(); i++)
         {
-            if (i * windowSize > sequenceNumberOfLastPacket)
+            if ((i - 1) * messagesPerPacket > sequenceNumberOfLastPacket)
             {
                 return 0;
             }
@@ -158,7 +164,7 @@ private:
         packet->sequenceNumber = sequenceNumber;
         packet->type = PAYLOAD;
         packet->length = MAX_PAYLOAD_SIZE;
-        packet->payload.data = reinterpret_cast<char*>(calloc(1, MAX_PAYLOAD_SIZE));
+        packet->payload.data = reinterpret_cast<char*>(malloc(MAX_PAYLOAD_SIZE));
         if (!packet->payload.data)
         {
             perror("malloc");
