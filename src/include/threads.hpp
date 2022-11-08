@@ -21,6 +21,7 @@ inline void assign_handler(void (*handler)(int))
 
 struct DispatcherArgs
 {
+    PerformanceConfig* config;
     Parser::Host host;
     std::vector<PacketQueue<char*>*>& queues;
 };
@@ -28,7 +29,7 @@ struct DispatcherArgs
 struct ReceiverArgs
 {
     Logger& logger;
-    PerformanceConfig config;
+    PerformanceConfig* config;
     PacketQueue<char*>* queue;
     uint64_t id;
     uint32_t numberOfMessagesToBeSent;
@@ -38,7 +39,7 @@ struct ReceiverArgs
 struct SenderArgs
 {
     Logger& logger;
-    PerformanceConfig config;
+    PerformanceConfig* config;
     uint64_t src;
     Parser::Host dest;
     uint32_t numberOfMessagesToBeSent;

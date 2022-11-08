@@ -9,6 +9,7 @@
 
 #include "threads.hpp"
 #include "macros.hpp"
+#include "network_utils.hpp"
 
 #include "Logger.hpp"
 #include "PacketQueue.hpp"

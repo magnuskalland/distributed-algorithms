@@ -23,5 +23,3 @@ enum {
         host.sin_family = AF_INET;  \
         host.sin_addr.s_addr = ip;  \
         host.sin_port = port;
-
-#define SOCKET() (socket(AF_INET, SOCK_DGRAM, 0))

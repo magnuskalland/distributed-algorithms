@@ -15,7 +15,7 @@
 #include "packets.hpp"
 #include "macros.hpp"
 #include "parser.hpp"
-#include "poll.hpp"
+#include "network_utils.hpp"
 
 int sockfd, epollfd;
 char* buf;
@@ -50,10 +50,9 @@ void* dispatch(void* ptr)
 
     std::cout << "Receiving on " << args->host.ipReadable() << ":" << args->host.portReadable() << "\n";
 
-    sockfd = SOCKET();
+    sockfd = get_socket(args->config->getSocketBufferSize());
     if (sockfd == -1)
     {
-        perror("socket");
         traceerror();
         pthread_exit(NULL);
     }

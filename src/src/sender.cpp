@@ -8,7 +8,7 @@
 #include "threads.hpp"
 #include "parser.hpp"
 #include "macros.hpp"
-#include "poll.hpp"
+#include "network_utils.hpp"
 #include "config.hpp"
 
 #include "Logger.hpp"
@@ -45,13 +45,11 @@ void* send(void* ptr)
     assign_handler(clean);
     struct SenderArgs* args = reinterpret_cast<struct SenderArgs*>(ptr);
 
-    timer = new Timer(args->config.windowSize,
-        args->config.timeoutSec, args->config.timeoutNano);
+    timer = new Timer(args->config->getWindowSize(), args->config->getTimeoutSec(), args->config->getTimeoutNano());
 
-    sockfd = SOCKET();
+    sockfd = get_socket(args->config->getSocketBufferSize());
     if (sockfd == -1)
     {
-        perror("socket");
         traceerror();
         pthread_exit(NULL);
     }
@@ -59,7 +57,7 @@ void* send(void* ptr)
     std::cout << "Setting up destination " << args->dest.ipReadable() << ":" << args->dest.portReadable() << "\n";
 
     window = new SenderWindow(sockfd, args->src, args->dest.ip, args->dest.port,
-        args->config.windowSize, args->config.messagesPerPacket, args->numberOfMessagesToBeSent);
+        args->config->getWindowSize(), args->config->getMessagesPerPacket(), args->numberOfMessagesToBeSent);
 
     /* prepare epoll */
     epollfd = epoll_setup(&setup);
@@ -71,7 +69,7 @@ void* send(void* ptr)
 
     /* add fds to epoll */
     epoll_add_fd(epollfd, sockfd, &setup);
-    for (uint32_t i = 0; i < args->config.windowSize; i++)
+    for (uint32_t i = 0; i < args->config->getWindowSize(); i++)
     {
         epoll_add_fd(epollfd, timer->getTimerFd(i + 1), &setup);
     }

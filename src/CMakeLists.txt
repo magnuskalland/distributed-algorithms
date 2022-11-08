@@ -2,7 +2,7 @@
 # You can, however, change the list of files that comprise this variable.
 
 include_directories(include)
-set(SOURCES src/main.cpp src/hello.c src/sender.cpp src/receiver.cpp src/dispatcher.cpp src/packets.cpp src/poll.cpp)
+set(SOURCES src/main.cpp src/hello.c src/sender.cpp src/receiver.cpp src/dispatcher.cpp src/packets.cpp src/network_utils.cpp)
 
 # DO NOT EDIT THE FOLLOWING LINES
 find_package(Threads)

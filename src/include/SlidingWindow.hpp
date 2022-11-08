@@ -7,6 +7,8 @@
 #include <sys/types.h>
 #include <stddef.h>
 
+#include <cmath>
+
 #include "CircularBuffer.hpp"
 #include "Timer.hpp"
 #include "packets.hpp"

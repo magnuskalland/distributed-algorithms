@@ -46,8 +46,7 @@ static pthread_t* receivers;
 static int** receiver_sockets;
 static pthread_t dispatcher, sender;
 static std::vector<struct ReceiverArgs> receiver_args;
-
-static PerformanceConfig config;
+static PerformanceConfig* config;
 
 static void stop(int)
 {
@@ -151,25 +150,16 @@ int main(int argc, char** argv)
 	outputFile += parser->outputPath();
 
 	std::tie(numberOfMessagesToBeSent, receiverProcess) = parser->getConfig();
-
-	config.messagesPerPacket = MESSAGES_PER_PACKET;
-	config.windowSize = WINDOW_SIZE * MESSAGES_PER_PACKET > numberOfMessagesToBeSent ?
-		numberOfMessagesToBeSent / MESSAGES_PER_PACKET + 1 : WINDOW_SIZE;
-	config.timeoutSec = TIMEOUT_SEC;
-	config.timeoutNano = TIMEOUT_NANO;
-
-	printf("%-22s: %d\n%-22s: %d\n%-22s: %.2f ms\n\n",
-		"Messages per sequence", config.messagesPerPacket,
-		"Sequences per window", config.windowSize,
-		"Timeout", static_cast<float>(config.timeoutNano) / 1000000);
+	config = new PerformanceConfig(numberOfMessagesToBeSent, sizeof(struct MessageSequence));
+	config->print();
 
 	number_of_receivers = hosts.size();
 	receivers = new pthread_t[number_of_receivers];
 	receiver_sockets = new int* [number_of_receivers];
 	role = parser->id() == receiverProcess ? RECEIVER : SENDER;
 
-	struct DispatcherArgs dispatcher_args = { hosts[receiverProcess - 1], std::ref(queues) };
-	struct SenderArgs sender_args = { std::ref(logger), config,parser->id(),
+	struct DispatcherArgs dispatcher_args = { config, hosts[receiverProcess - 1], std::ref(queues) };
+	struct SenderArgs sender_args = { std::ref(logger), config, parser->id(),
 		hosts[receiverProcess - 1], numberOfMessagesToBeSent };
 
 	switch (role)
