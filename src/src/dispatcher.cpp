@@ -120,7 +120,7 @@ void* dispatch(void* ptr)
 
         memcpy(&buf[PACKED_MESSAGE_SEQUENCE_SIZE], &src_addr, addrlen);
         memcpy(&sender, &buf[offsetof(struct MessageSequence, sender)], sizeof(uint64_t));
-        queues[sender - 1]->pusMessage(buf);
+        queues[sender - 1]->pushMessage(buf);
     }
     clean(0);
     pthread_exit(NULL);

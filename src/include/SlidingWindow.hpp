@@ -30,19 +30,19 @@ public:
         messageSequencePlaceholder.sender = sourceId;
         messageSequencePlaceholder.numberOfPackets = messagesPerPacket;
 
-        messageSequencesOutOfOrder = new CircularBuffer<struct MessageSequence*>(windowSize);
-        deliverableMessages = new CircularBuffer<struct MessageSequence*>(windowSize);
+        resequencingBuffer = new CircularBuffer<struct MessageSequence*>(windowSize);
+        orderedMessages = new CircularBuffer<struct MessageSequence*>(windowSize);
     }
     ~SlidingWindow()
     {
-        delete(messageSequencesOutOfOrder);
-        delete(deliverableMessages);
+        delete(resequencingBuffer);
+        delete(orderedMessages);
     }
 
     uint32_t shiftWindow()
     {
         uint32_t shift;
-        shift = messageSequencesOutOfOrder->getShiftCounter();
+        shift = resequencingBuffer->getShiftCounter();
         if (shift == 0)
         {
             return 0;
@@ -50,9 +50,9 @@ public:
 
         for (uint32_t i = windowStart(); i < windowStart() + shift; i++)
         {
-            deliverableMessages->insert(messageSequencesOutOfOrder->remove(i), i);
+            orderedMessages->insert(resequencingBuffer->remove(i), i);
         }
-        messageSequencesOutOfOrder->shift(shift);
+        resequencingBuffer->shift(shift);
         return shift;
     }
 
@@ -68,22 +68,22 @@ public:
 
     inline uint32_t windowStart()
     {
-        return messageSequencesOutOfOrder->getStart();
+        return resequencingBuffer->getStart();
     }
 
     inline uint32_t windowEnd()
     {
-        return messageSequencesOutOfOrder->getEnd();
+        return resequencingBuffer->getEnd();
     }
 
     inline bool duplicate(struct MessageSequence* sequence)
     {
-        return messageSequencesOutOfOrder->get(sequence->sequenceNumber)
+        return resequencingBuffer->get(sequence->sequenceNumber)
             || sequenceLeftOfWindow(sequence);
     }
     inline struct MessageSequence* getMessagesToDeliver()
     {
-        return deliverableMessages->pop();
+        return orderedMessages->pop();
     }
 
 protected:
@@ -115,7 +115,6 @@ protected:
 
     int socket;
     sockaddr_in destinationAddress;
-
     uint32_t windowSize;
     uint32_t messagesPerPacket;
     uint32_t sequenceNumberOfLastPacket;
@@ -123,8 +122,8 @@ protected:
     struct MessageSequence messageSequencePlaceholder;
     char buffer[PACKED_MESSAGE_SEQUENCE_SIZE] = { 0 };
 
-    CircularBuffer<struct MessageSequence*>* messageSequencesOutOfOrder;
-    CircularBuffer<struct MessageSequence*>* deliverableMessages;
+    CircularBuffer<struct MessageSequence*>* resequencingBuffer;
+    CircularBuffer<struct MessageSequence*>* orderedMessages;
 
     struct Statistics
     {

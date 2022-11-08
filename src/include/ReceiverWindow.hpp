@@ -52,7 +52,7 @@ public:
             return 0;
         }
 
-        messageSequencesOutOfOrder->insert(messageSequence, messageSequence->sequenceNumber);
+        resequencingBuffer->insert(messageSequence, messageSequence->sequenceNumber);
         statistics.correctTransmits += 1;
         shiftWindow();
 

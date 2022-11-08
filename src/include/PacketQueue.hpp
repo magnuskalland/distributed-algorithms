@@ -31,7 +31,7 @@ public:
             free(back);
         }
     }
-    void pusMessage(T t)
+    void pushMessage(T t)
     {
         pthread_mutex_lock(&mutex);
         dq.push_front(t);

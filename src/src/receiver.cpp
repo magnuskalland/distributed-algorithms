@@ -30,18 +30,17 @@ void* receive(void* ptr)
     assign_handler(clean);
     struct ReceiverArgs* args = reinterpret_cast<struct ReceiverArgs*>(ptr);
 
-    *(args->sockfd) = SOCKET();
+    *(args->sockfd) = get_socket(args->config->getSocketBufferSize());
     if (*args->sockfd == -1)
     {
-        perror("socket");
         traceerror();
         pthread_exit(0);
     }
 
-    ReceiverWindow window = ReceiverWindow(*args->sockfd, args->id, args->config.windowSize,
-        args->config.messagesPerPacket, args->numberOfMessagesToBeSent);
+    ReceiverWindow window = ReceiverWindow(*args->sockfd, args->id, args->config->getWindowSize(),
+        args->config->getMessagesPerPacket(), args->numberOfMessagesToBeSent);
 
-    /* loop forever because the last ack may get lost */
+    /* loop forever because the last ack may get lost and we don't send tail loss probe */
     while (true)
     {
         message = args->queue->popMessage(); // blocking call, returns a heap allocated memory area

@@ -84,7 +84,7 @@ public:
         }
 
         /* put packet in buffer */
-        messageSequencesOutOfOrder->insert(sequence, sequence->sequenceNumber);
+        resequencingBuffer->insert(sequence, sequence->sequenceNumber);
         statistics.correctTransmits += 1;
 
         /* if packet is not the first in window */
