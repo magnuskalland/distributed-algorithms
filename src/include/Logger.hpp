@@ -18,6 +18,7 @@ public:
     void log(std::string s)
     {
         logMutex.lock();
+        std::cout << s;
         buffer << s;
         logMutex.unlock();
     }
