@@ -33,6 +33,9 @@
  * 	Raw run:
  * 		./bin/da_proc --id 1 --hosts ../example/hosts --output ../example/output/1.output ../example/configs/perfect-links.config
  * 		valgrind --track-fds=yes --leak-check=full --show-leak-kinds=all --track-origins=yes ./bin/da_proc --id 1 --hosts ../example/hosts --output ../example/output/1.output ../example/configs/perfect-links.config
+ *
+ *  Stress test:
+ * 		python3 stress.py -r ../template_cpp/run.sh -t perfect -l /media/dcl/shared/template_cpp/output -p 10 -m 100
  */
 
 static std::vector<PacketQueue<char*>*> queues;
