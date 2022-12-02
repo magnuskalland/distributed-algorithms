@@ -14,10 +14,10 @@ In contrast to the stop-and-go protocol for reliability, performance is enhanced
 `min(default socket buffer size in bytes, predetermined number of messages to send in bytes)`
 The **window size is static**, meaning the mechanism will not contribute to less packet loss. However, since the project is meant to only run locally, we can easily detect packet losses during development, and tune the [configuration](https://github.com/magnuskalland/distributed-algorithms/blob/main/src/include/config.hpp) to that. Until now, packet loss has never been detected when transmitting over links without loss, reordering and delays. We can therefore conclude with that a receiving buffer never overflows, even in the best conditions where senders send at an very high speed.
 
-![Architecture](perfect-links.png)
+![Architecture](assets/perfect-links.png)
 
 #### Uniform reliable broadcast and FIFO ordering
 
 Built on top of reliable broadcast, this implementation features guaranteed FIFO ordering of messages broadcasted by each sender.
 
-![Architecture](uniformity.png)
+![Architecture](assets/uniformity.png)
