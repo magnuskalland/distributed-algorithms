@@ -4,13 +4,9 @@
 #include "config.hpp"
 
 #define MAX_HOSTS           128
-#define UNIDENTIFIED_HOST   MAX_HOSTS + 1
+#define UNIDENTIFIED_HOST   (MAX_HOSTS + 1)
 #define LOG_MSG_SIZE        20
-
-enum {
-    RECEIVER,
-    SENDER
-};
+#define MAX_THREADS         8
 
 #define traceerror()                           \
     (fprintf(stderr, "%s:%s() at line %d\n",    \

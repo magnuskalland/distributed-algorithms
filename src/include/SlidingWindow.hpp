@@ -12,118 +12,151 @@
 #include "CircularBuffer.hpp"
 #include "Timer.hpp"
 #include "packets.hpp"
+#include "network_utils.hpp"
 
 class SlidingWindow
 {
 public:
-    SlidingWindow(int socket, uint64_t sourceId, uint32_t windowSize,
+    inline SlidingWindow(int socket, uint64_t id, uint64_t destinationId, in_addr_t destinationIp,
+        uint16_t destinationPort, uint32_t windowSize,
         uint32_t messagesPerPacket, uint32_t sequenceNumberOfLastPacket)
     {
         this->socket = socket;
+        this->id = id;
+        this->destinationId = destinationId;
         this->windowSize = windowSize;
         this->messagesPerPacket = messagesPerPacket;
         this->sequenceNumberOfLastPacket = sequenceNumberOfLastPacket;
 
-        bzero(&destinationAddress, sizeof(sockaddr_in));
+        setuphost(destinationAddress, destinationIp, destinationPort);
         bzero(&messageSequencePlaceholder, sizeof(struct MessageSequence));
 
-        messageSequencePlaceholder.sender = sourceId;
+        pthread_mutex_init(&mutex, NULL);
+
+        messageSequencePlaceholder.sender = id;
         messageSequencePlaceholder.numberOfPackets = messagesPerPacket;
-
-        resequencingBuffer = new CircularBuffer<struct MessageSequence*>(windowSize);
-        orderedMessages = new CircularBuffer<struct MessageSequence*>(windowSize);
     }
-    ~SlidingWindow()
+
+    virtual inline ~SlidingWindow() {
+        // printStatistics();
+        pthread_mutex_destroy(&mutex);
+    }
+
+    inline uint64_t getId()
     {
-        delete(resequencingBuffer);
-        delete(orderedMessages);
+        return id;
     }
 
-    uint32_t shiftWindow()
+    pthread_mutex_t* getLock()
     {
-        uint32_t shift;
-        shift = resequencingBuffer->getShiftCounter();
-        if (shift == 0)
-        {
-            return 0;
-        }
-
-        for (uint32_t i = windowStart(); i < windowStart() + shift; i++)
-        {
-            orderedMessages->insert(resequencingBuffer->remove(i), i);
-        }
-        resequencingBuffer->shift(shift);
-        return shift;
+        return &mutex;
     }
 
-    inline bool notFinished()
+    inline void lock()
     {
-        return statistics.correctTransmits < sequenceNumberOfLastPacket;
+        pthread_mutex_lock(&mutex);
     }
 
-    inline uint32_t getWindowSize()
+    inline void unlock()
+    {
+        pthread_mutex_unlock(&mutex);
+    }
+
+    inline uint32_t getWindowSize() const
     {
         return windowSize;
     }
 
-    inline uint32_t windowStart()
+    inline uint64_t getDestinationId()
     {
-        return resequencingBuffer->getStart();
-    }
-
-    inline uint32_t windowEnd()
-    {
-        return resequencingBuffer->getEnd();
-    }
-
-    inline bool duplicate(struct MessageSequence* sequence)
-    {
-        return resequencingBuffer->get(sequence->sequenceNumber)
-            || sequenceLeftOfWindow(sequence);
-    }
-    inline struct MessageSequence* getMessagesToDeliver()
-    {
-        return orderedMessages->pop();
+        return destinationId;
     }
 
 protected:
-    inline ssize_t sendSequence(struct MessageSequence* sequence, int type)
+    virtual inline uint32_t shiftWindow() = 0;
+    virtual uint32_t windowStart() = 0;
+    virtual inline uint32_t windowEnd() = 0;
+    virtual inline bool duplicate(uint32_t sequenceNumber) = 0;
+    virtual inline void printStatistics() = 0;
+
+    inline ssize_t sendSequence(struct MessageSequence* sequence)
     {
         char* serialiedSequence;
-        ssize_t size;
-        size = serialize_sequence(&serialiedSequence, sequence, type);
-        for (uint32_t i = 0; i < sequence->numberOfPackets; i++)
-        {
-            free(sequence->payload[i].payload.data);
-        }
-        ssize_t wc = sendto(socket,
-            serialiedSequence, size,
-            0,
+        ssize_t size, wc;
+        size = serialize_sequence(&serialiedSequence, sequence);
+        // if (payload(sequence->type))
+        // {
+        //     if (getDestinationId() == id)
+        //         printf("PAYLOAD %d to self\n", sequence->sequenceNumber);
+        //     else
+        //         printf("PAYLOAD %d to %ld\n", sequence->sequenceNumber, destinationId);
+        // }
+
+        // else if (ack(sequence->type))
+        // {
+        //     if (getDestinationId() == id)
+        //         printf("ACK %d to self\n", sequence->sequenceNumber);
+        //     else
+        //         printf("ACK %d to %ld\n", sequence->sequenceNumber, destinationId);
+        // }
+
+        // else if (forward(sequence->type))
+        // {
+        //     if (getDestinationId() == id)
+        //         printf("FORWARD (%ld, %d) to self\n",
+        //             sequence->sender, sequence->sequenceNumber);
+        //     else
+        //         printf("FORWARD (%ld, %d) to %ld\n",
+        //             sequence->sender, sequence->sequenceNumber, destinationId);
+        // }
+
+        // else if (delivery(sequence->type))
+        // {
+        //     if (getDestinationId() == id)
+        //         printf("DELIVERY (%ld, %d) to self\n",
+        //             sequence->sender, sequence->sequenceNumber);
+        //     else
+        //         printf("DELIVERY (%ld, %d) to %ld\n",
+        //             sequence->sender, sequence->sequenceNumber, destinationId);
+        // }
+
+        wc = sendto(socket,
+            serialiedSequence, size, 0,
             reinterpret_cast<sockaddr*>(&destinationAddress), sizeof(destinationAddress));
         if (wc == -1)
         {
+            fprintf(stderr, "sendto(%d, %d, %ld, ...)\n", socket, sequence->sequenceNumber, size);
             perror("sendto");
+            traceerror();
+            return -1;
         }
+
         free(serialiedSequence);
         return wc;
     }
 
-    inline bool sequenceLeftOfWindow(struct MessageSequence* sequence)
+    inline bool sequenceLeftOfWindow(const uint32_t sequenceNumber)
     {
-        return sequence->sequenceNumber < windowStart();
+        return sequenceNumber < windowStart();
     }
 
+
+
+    uint64_t id, destinationId;
     int socket;
+
     sockaddr_in destinationAddress;
     uint32_t windowSize;
     uint32_t messagesPerPacket;
     uint32_t sequenceNumberOfLastPacket;
 
+    pthread_mutex_t mutex;
+
     struct MessageSequence messageSequencePlaceholder;
     char buffer[PACKED_MESSAGE_SEQUENCE_SIZE] = { 0 };
 
-    CircularBuffer<struct MessageSequence*>* resequencingBuffer;
-    CircularBuffer<struct MessageSequence*>* orderedMessages;
+    bool t = true;
+    bool f = false;
 
     struct Statistics
     {

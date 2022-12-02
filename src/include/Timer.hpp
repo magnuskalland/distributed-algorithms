@@ -5,7 +5,10 @@
 #include <unistd.h>
 #include <stdio.h>
 
+#include "macros.hpp"
 #include "CircularBuffer.hpp"
+
+static uint32_t count = 0;
 
 enum type
 {
@@ -15,7 +18,7 @@ enum type
 class Timer
 {
 public:
-    Timer(uint32_t windowSize, time_t secs, long nanoSecs)
+    inline Timer(uint32_t windowSize, time_t secs, long nanoSecs)
     {
         this->windowSize = windowSize;
         this->secs = secs;
@@ -32,6 +35,7 @@ public:
             tmp_itimerspec = reinterpret_cast<struct itimerspec*>(malloc(windowSize * sizeof(struct itimerspec)));
             if (!tmp_itimerspec)
             {
+                traceerror();
                 perror("malloc");
                 return;
             }
@@ -43,6 +47,7 @@ public:
             tmp_fd = reinterpret_cast<int*>(malloc(windowSize * sizeof(int)));
             if (!tmp_fd)
             {
+                traceerror();
                 perror("malloc");
                 destroy();
                 return;
@@ -58,7 +63,7 @@ public:
             timerfds->insert(tmp_fd, i + 1);
         }
     }
-    ~Timer()
+    inline ~Timer()
     {
         destroy();
     }
@@ -87,6 +92,7 @@ public:
             perror("timerfd_settime");
         }
         return wc;
+        return 0;
     }
 
     inline uint32_t matchTimer(int fd)
@@ -99,6 +105,11 @@ public:
             }
         }
         return 0;
+    }
+
+    inline CircularBuffer<int*>* getTimerFds()
+    {
+        return timerfds;
     }
 
     inline int getTimerFd(uint32_t sequenceNumber)
@@ -116,11 +127,17 @@ public:
 
     inline void print(uint32_t sequenceNumber)
     {
-        printf("Timer %d (fd%d): %s\n", sequenceNumber,
+        printf("Timer %d (fd %d): %s\n", sequenceNumber,
             *timerfds->get(sequenceNumber),
             timers->get(sequenceNumber)->it_value.tv_sec +
             timers->get(sequenceNumber)->it_value.tv_nsec == 0
             ? "Not armed" : "Armed");
+    }
+
+    inline void forceShift(uint32_t resetNumber)
+    {
+        timerfds->forceShift(resetNumber);
+        timers->forceShift(resetNumber);
     }
 
 private:
@@ -157,4 +174,5 @@ private:
 
     CircularBuffer<int*>* timerfds;
     CircularBuffer<struct itimerspec*>* timers;
+
 };

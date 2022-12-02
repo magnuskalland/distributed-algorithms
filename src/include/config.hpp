@@ -3,53 +3,63 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define MESSAGES_PER_PACKET     8
-#define WINDOW_SIZE             1000
-#define TIMEOUT_SEC             0
+#define MESSAGES_PER_PACKET     1
+#define WINDOW_SIZE             3
+#define TIMEOUT_SEC             3
 #define TIMEOUT_NANO            50000000
+#define SELF_DELIVERY           true
 
 class PerformanceConfig
 {
 public:
-    PerformanceConfig(uint32_t numberOfMessagesToBeSent, uint32_t unitSize)
+    PerformanceConfig(uint32_t n_messages, uint32_t unitSize, uint64_t network_size)
     {
         messagesPerPacket = MESSAGES_PER_PACKET;
-        windowSize = WINDOW_SIZE * MESSAGES_PER_PACKET > numberOfMessagesToBeSent ?
-            numberOfMessagesToBeSent / MESSAGES_PER_PACKET + 1 : WINDOW_SIZE;
+        windowSize = WINDOW_SIZE * MESSAGES_PER_PACKET > n_messages ?
+            MESSAGES_PER_PACKET >= n_messages ?
+            1 :
+            n_messages / MESSAGES_PER_PACKET + 1
+            : WINDOW_SIZE;
         timeoutSec = TIMEOUT_SEC;
         timeoutNano = TIMEOUT_NANO;
-        socketBufferSize = windowSize * unitSize + 1000;
+        socketBufferSize = windowSize * unitSize * (network_size * network_size * 10);
+        selfDelivery = SELF_DELIVERY;
     }
 
     void print()
     {
-        printf("%-22s: %d\n%-22s: %d\n%-22s: %d bytes\n%-22s: %.2f ms\nYou can change configuration settings with macros in \n'%s'\n\n",
+        printf("%-30s: %d\n%-30s: %d\n%-30s: min %ld bytes\n%-30s: %.2fms\n%-30s: %s\nEdit configuration settings in '%s'\n\n",
             "Messages per sequence", messagesPerPacket,
             "Sequences per window", windowSize,
             "Socket buffer size", socketBufferSize,
             "Timeout", static_cast<float>(timeoutNano) / 1000000,
+            "Self delivery", selfDelivery ? "True" : "False",
             __FILE__);
     }
 
-    inline uint32_t getMessagesPerPacket()
+    uint32_t getMessagesPerPacket()
     {
         return messagesPerPacket;
     }
-    inline uint32_t getWindowSize()
+    uint32_t getWindowSize()
     {
         return windowSize;
     }
-    inline uint32_t getSocketBufferSize()
+    uint64_t getSocketBufferSize()
     {
         return socketBufferSize;
     }
-    inline uint32_t getTimeoutSec()
+    uint32_t getTimeoutSec()
     {
         return timeoutSec;
     }
-    inline uint32_t getTimeoutNano()
+    uint32_t getTimeoutNano()
     {
         return timeoutNano;
+    }
+    bool getSelfDelivery()
+    {
+        return selfDelivery;
     }
 
 private:
@@ -69,7 +79,7 @@ private:
      * The socket buffer size we manually set the sockets with by using setsockopt.
      * Will be a product of packet size in bytes and windowSize.
     */
-    uint32_t socketBufferSize;
+    uint64_t socketBufferSize;
 
     /*
      * Timeout in seconds before packet retransmission is triggered.
@@ -81,4 +91,9 @@ private:
      * Is added to the number of seconds.
     */
     uint32_t timeoutNano;
+
+    /*
+     * Determines if host A also delivers to host A.
+    */
+    bool selfDelivery;
 };

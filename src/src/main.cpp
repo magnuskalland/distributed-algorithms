@@ -2,6 +2,9 @@
 #include <iostream>
 #include <thread>
 #include <tuple>
+#include <atomic>
+#include <map>
+#include <set>
 
 #include <signal.h>
 #include <net/ethernet.h>
@@ -10,14 +13,19 @@
 #include "hello.h"
 #include "macros.hpp"
 #include "config.hpp"
-#include "threads.hpp"
+#include "worker.hpp"
+#include "network_utils.hpp"
 
+#include "Barrier.hpp"
 #include "ReceiverWindow.hpp"
-#include "PacketQueue.hpp"
 #include "Logger.hpp"
+#include "ConcurrentMap.hpp"
 
 /*
- *	./run.sh --id 1 --hosts ../example/hosts --output ../example/output/1.output ../example/configs/perfect-links.config
+ *	./run.sh --id 1 --hosts ../example/hosts --output ../example/output/1.output ../example/configs/fifo-broadcast.config
+ *	./run.sh --id 2 --hosts ../example/hosts --output ../example/output/2.output ../example/configs/fifo-broadcast.config
+ *	./run.sh --id 3 --hosts ../example/hosts --output ../example/output/3.output ../example/configs/fifo-broadcast.config
+ *	./run.sh --id 4 --hosts ../example/hosts --output ../example/output/4.output ../example/configs/fifo-broadcast.config
 
  *	../example/hosts:
  *		1 localhost 11001
@@ -27,29 +35,44 @@
  * ../example/output/1.output
  * 		empty file
  *
- * ../example/configs/perfect-links.config
- * 		10 2
+ * ../example/configs/fifo-broadcast.config
+ * 		10
  *
  * 	Raw run:
- * 		./bin/da_proc --id 1 --hosts ../example/hosts --output ../example/output/1.output ../example/configs/perfect-links.config
+ * 		./bin/da_proc --id 1 --hosts ../example/hosts --output ../example/output/1.output ../example/configs/fifo-broadcast.config
  * 		valgrind --track-fds=yes --leak-check=full --show-leak-kinds=all --track-origins=yes ./bin/da_proc --id 1 --hosts ../example/hosts --output ../example/output/1.output ../example/configs/perfect-links.config
  *
  *  Stress test:
- * 		python3 stress.py -r ../template_cpp/run.sh -t perfect -l /media/dcl/shared/template_cpp/output -p 10 -m 100
+ * 		python3 stress.py -r ../template_cpp/run.sh -t fifo -l /media/dcl/shared/template_cpp/output -p 10 -m 100
  */
 
-static std::vector<PacketQueue<char*>*> queues;
 static std::string outputFile;
+static Parser::Host host;
 static Logger logger;
-static size_t number_of_receivers;
+static std::vector<Parser::Host> hosts;
 
-static uint32_t i, role, numberOfMessagesToBeSent, receiverProcess;
+static Barrier* barrier;
 
-static pthread_t* receivers;
-static int** receiver_sockets;
-static pthread_t dispatcher, sender;
-static std::vector<struct ReceiverArgs> receiver_args;
+static uint32_t i, n_messages;
+static uint64_t id, network_size;
+static pthread_t threads[MAX_THREADS];
+static int rc, sockfd, epollfd;
 static PerformanceConfig* config;
+
+static struct SenderConnection** sender_connections;
+static ConcurrentMap<int, SenderConnection*>* sender_timer_map;
+
+static struct ReceiverConnection** receiver_connections;
+
+static struct DeliveryConnection** delivery_connections;
+static ConcurrentMap<int, DeliveryConnection*>* delivery_timer_map;
+
+static socklen_t addrlen = sizeof(sockaddr);
+static struct sockaddr_in server;
+static struct epoll_event events, setup;
+
+static BroadcastLogLock broadcast_log_lock;
+static pthread_mutex_t epoll_event_lock;
 
 static void stop(int)
 {
@@ -59,46 +82,48 @@ static void stop(int)
 
 	// immediately stop network packet processing
 	std::cout << "Immediately stopping network packet processing.\n";
-	switch (role)
+
+	for (i = 0; i < MAX_THREADS; i++)
 	{
-	case RECEIVER:
-		pthread_kill(dispatcher, SIGUSR1);
-		pthread_join(dispatcher, NULL);
-		for (size_t i = 0; i < number_of_receivers; i++)
-		{
-			if (i == receiverProcess - 1) continue;
-			pthread_kill(receivers[i], SIGUSR1);
-		}
-		for (size_t i = 0; i < number_of_receivers; i++)
-		{
-			if (i == receiverProcess - 1) continue;
-			pthread_join(receivers[i], NULL);
-			close(*receiver_sockets[i]);
-			free(receiver_sockets[i]);
-		}
-		break;
-
-	case SENDER:
-		pthread_kill(sender, SIGUSR1);
-		pthread_join(sender, NULL);
-		break;
-
-	default:
-		fprintf(stderr, "role");
-		break;
+		pthread_kill(threads[i], SIGUSR1);
 	}
-
-	delete[] receivers;
-	while (queues.size())
+	for (i = 0; i < MAX_THREADS; i++)
 	{
-		delete(queues.back());
-		queues.pop_back();
+		pthread_join(threads[i], NULL);
 	}
 
 	// write/flush output file if necessary
 	std::cout << "Writing output.\n";
-
 	logger.write(outputFile);
+
+	for (i = 0; i < network_size; i++)
+	{
+		delete sender_connections[i]->timer;
+		delete sender_connections[i]->window;	// this crashes the process on the delivery server
+		free(sender_connections[i]);
+
+		delete receiver_connections[i]->window;	// this crashes the process on the delivery server
+		free(receiver_connections[i]);
+
+		delete delivery_connections[i]->timer;
+		delete delivery_connections[i]->window;	// this crashes the process on the delivery server
+		free(delivery_connections[i]);
+	}
+
+	hosts.clear();
+	delete sender_timer_map;
+	delete delivery_timer_map;
+	delete config;
+	delete barrier;
+	delete[] sender_connections;
+	delete[] receiver_connections;
+	delete[] delivery_connections;
+
+	pthread_mutex_destroy(&broadcast_log_lock.mutex);
+	pthread_mutex_destroy(&epoll_event_lock);
+
+	close(sockfd);
+	close(epollfd);
 
 	// exit directly from signal handler
 	exit(0);
@@ -127,7 +152,7 @@ int main(int argc, char** argv)
 
 	std::cout << "List of resolved hosts is:\n";
 	std::cout << "==========================\n";
-	auto hosts = parser->hosts();
+	hosts = parser->hosts();
 	for (auto& host : hosts)
 	{
 		std::cout << host.id << "\n";
@@ -152,57 +177,117 @@ int main(int argc, char** argv)
 
 	outputFile += parser->outputPath();
 
-	std::tie(numberOfMessagesToBeSent, receiverProcess) = parser->getConfig();
-	config = new PerformanceConfig(numberOfMessagesToBeSent, sizeof(struct MessageSequence));
+	n_messages = parser->getConfig();
+
+	network_size = hosts.size();
+	config = new PerformanceConfig(n_messages, sizeof(struct MessageSequence), network_size);
 	config->print();
+	id = parser->id();
+	host = hosts[parser->id() - 1];
+	setuphost(server, host.ip, host.port);
 
-	number_of_receivers = hosts.size();
-	receivers = new pthread_t[number_of_receivers];
-	receiver_sockets = new int* [number_of_receivers];
-	role = parser->id() == receiverProcess ? RECEIVER : SENDER;
+	sender_timer_map = new ConcurrentMap<int, SenderConnection*>();
+	delivery_timer_map = new ConcurrentMap<int, DeliveryConnection*>();
+	pthread_mutex_init(&broadcast_log_lock.mutex, NULL);
+	pthread_mutex_init(&epoll_event_lock, NULL);
 
-	struct DispatcherArgs dispatcher_args = { config, hosts[receiverProcess - 1], std::ref(queues) };
-	struct SenderArgs sender_args = { std::ref(logger), config, parser->id(),
-		hosts[receiverProcess - 1], numberOfMessagesToBeSent };
+	sender_connections = new struct SenderConnection* [network_size];
+	receiver_connections = new struct ReceiverConnection* [network_size];
+	delivery_connections = new struct DeliveryConnection* [network_size];
 
-	switch (role)
+	barrier = new Barrier(MAX_THREADS);
+
+	for (i = 0; i < network_size; i++)
 	{
-	case RECEIVER:
-
-		/* host is a receiver */
-
-		for (i = 0; i < number_of_receivers; i++)
-		{
-			queues.push_back(new PacketQueue<char*>());
-			receiver_sockets[i] = reinterpret_cast<int*>(malloc(sizeof(int)));
-			receiver_args.push_back({ std::ref(logger), config, queues[i], parser->id(),
-				numberOfMessagesToBeSent, receiver_sockets[i] });
-		}
-
-		pthread_create(&dispatcher, NULL, dispatch, reinterpret_cast<void*>(&dispatcher_args));
-		for (i = 0; i < number_of_receivers; i++)
-		{
-			if (i == receiverProcess - 1)
-			{
-				continue;
-			}
-
-			pthread_create(&receivers[i], NULL, receive,
-				reinterpret_cast<void*>(&receiver_args[i]));
-		}
-		break;
-	case SENDER:
-		/* host is a sender */
-		pthread_create(&sender, NULL, send, reinterpret_cast<void*>(&sender_args));
-		break;
-	default:
-		fprintf(stderr, "role");
-		break;
+		sender_connections[i] = reinterpret_cast<struct SenderConnection*>
+			(malloc(sizeof(struct SenderConnection)));
+		receiver_connections[i] = reinterpret_cast<struct ReceiverConnection*>
+			(malloc(sizeof(struct ReceiverConnection)));
+		delivery_connections[i] = reinterpret_cast<struct DeliveryConnection*>
+			(malloc(sizeof(struct DeliveryConnection)));
 	}
 
-	delete(parser);
+	std::cout << "Receiving on " << host.ipReadable() << ":" << host.portReadable() << "\n";
+
+	sockfd = get_socket(config->getSocketBufferSize());
+	if (sockfd == -1)
+	{
+		traceerror();
+		return EXIT_FAILURE;
+	}
+
+	rc = bind(sockfd, reinterpret_cast<sockaddr*>(&server), sizeof(server));
+	if (rc == -1)
+	{
+		perror("bind");
+		traceerror();
+		close(sockfd);
+		return EXIT_FAILURE;
+	}
+
+	epollfd = epoll_setup(&setup);
+	if (epollfd == -1)
+	{
+		traceerror();
+		close(sockfd);
+		return EXIT_FAILURE;
+	}
+
+	rc = epoll_add_fd(epollfd, sockfd, &setup);
+	if (rc == -1)
+	{
+		traceerror();
+		close(sockfd);
+		return EXIT_FAILURE;
+	}
+
+	bzero(&events, sizeof(struct epoll_event));
+	bzero(&setup, sizeof(struct epoll_event));
+
+	struct NetworkStruct network = {
+		&hosts,
+		sockfd,
+		epollfd,
+		events,
+		setup,
+	};
+
+	struct ThreadArgs thread_args = {
+		config,
+		std::ref(logger),
+		parser->id(),
+		n_messages,
+		&network,
+		sender_connections,
+		sender_timer_map,
+		&broadcast_log_lock,
+		receiver_connections,
+		delivery_connections,
+		delivery_timer_map,
+		&epoll_event_lock,
+		barrier,
+	};
 
 	std::cout << "Broadcasting and delivering messages...\n";
+
+	/* increase number of sockets allowed to open because we open a lot of timer file	*/
+	/* descriptors, more specifically 40 times the number of hosts of the network. 		*/
+	/* With test cases with up to 128 hosts, we need 5 120 file descriptors just 		*/
+	/* to use timers. 																	*/
+	int status = system("ulimit -n 8192");
+	if (status == -1)
+	{
+		trace();
+		perror("system");
+		return EXIT_FAILURE;
+	}
+
+	for (i = 0; i < MAX_THREADS; i++)
+	{
+		pthread_create(&threads[i], NULL, work, reinterpret_cast<void*>(&thread_args));
+	}
+
+	delete parser;
 
 	// After a process finishes broadcasting,
 	// it waits forever for the delivery of messages.

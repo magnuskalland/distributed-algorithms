@@ -119,15 +119,15 @@ public:
 		parsed = true;
 	}
 
-	std::tuple<uint32_t, uint32_t> getConfig()
+	uint32_t getConfig()
 	{
-		uint32_t numberOfMessagesToBeSent, receivingProcess;
+		uint32_t n_messages, receivingProcess;
 		std::ifstream configFile(configPath());
 		std::string line;
 		std::getline(configFile, line);
 		std::istringstream iss(line);
-		iss >> numberOfMessagesToBeSent >> receivingProcess;
-		return std::make_tuple(numberOfMessagesToBeSent, receivingProcess);
+		iss >> n_messages;
+		return n_messages;
 	}
 
 	unsigned long id() const

@@ -6,23 +6,26 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
+#include "macros.hpp"
 
 template<typename T>
 class CircularBuffer
 {
 public:
-    CircularBuffer(uint32_t bufferSize)
+    inline CircularBuffer(uint32_t bufferSize)
     {
         this->bufferSize = bufferSize;
         start = 0;
         buffer = static_cast<T*>(malloc(sizeof(T) * (bufferSize)));
         if (!buffer)
         {
+            traceerror();
             perror("malloc");
             return;
         }
+        bzero(buffer, sizeof(T) * (bufferSize));
     }
-    ~CircularBuffer()
+    inline ~CircularBuffer()
     {
         free(buffer);
     }
@@ -46,9 +49,9 @@ public:
         return getStart() + bufferSize;
     }
 
-    inline void insert(T ptr, uint32_t i)
+    inline void insert(T ptr, uint32_t index)
     {
-        buffer[getIndex(i - 1)] = ptr;
+        buffer[getIndex(index - 1)] = ptr;
     }
 
     inline T remove(uint32_t i)
@@ -68,6 +71,20 @@ public:
         start += count;
     }
 
+    inline uint32_t getShiftCounterWithPred(T pred)
+    {
+        uint32_t counter = 0;
+        for (uint32_t i = getStart(); i < getEnd(); i++)
+        {
+            if (!(get(i) == pred))
+            {
+                return counter;
+            }
+            counter++;
+        }
+        return counter;
+    }
+
     inline uint32_t getShiftCounter()
     {
         uint32_t counter = 0;
@@ -84,11 +101,26 @@ public:
 
     inline void print()
     {
+        printf("[");
         for (uint32_t i = getStart(); i < getEnd(); i++)
         {
-            printf("%d ", get(i) ? get(i)->sequenceNumber : 0);
+            printf("%d", get(i) ? i : -1);
+            if (i < getEnd() - 1) printf(" ");
         }
-        printf("\n");
+        printf("]\n");
+    }
+
+    inline void clear(T clearValue)
+    {
+        for (uint32_t i = 0; i < bufferSize; i++)
+        {
+            buffer[i] = clearValue;
+        }
+    }
+
+    inline void forceShift(uint32_t resetNumber)
+    {
+        start = resetNumber;
     }
 
 private:
@@ -96,6 +128,7 @@ private:
     {
         return i % bufferSize;
     }
+
     uint32_t bufferSize;
     uint32_t start;
     T* buffer;
